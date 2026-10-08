@@ -1322,7 +1322,7 @@ and validation described throughout the project.
 | `015-DC01-PDC-Time-Service-Assessment-and-Configuration.txt` | Documents assessment and configuration of the forest-root PDC Emulator time service, including the initial local-clock condition, Chrony configuration on UBUNTU01, NTP service on `10.10.10.40`, DC01 NTP communication testing, Windows Time configuration, final synchronization-source validation, and time-zone correction. |
 | `016-DC01-VMware-Time-Synchronization-Disabled.png` | Visually documents the VMware configuration with continuous guest-to-host time synchronization disabled for DC01 before validating the Domain Controller time-service architecture. |
 | `017-UBUNTU01-Pre-Chrony-Time-Synchronization-Baseline.png` | Captures UBUNTU01's time-synchronization state before Chrony was configured as the lab NTP service. |
-| `018-DC01-Active-Directory-Forest-Post-Promotion.png` | Provides visual confirmation of the `ad.cyberlab.test` Active Directory forest being available on DC01 after Domain Controller promotion. |
+| `018-DC01-Active-Directory-Forest-Post-Promotion.png` | Shows the Active Directory administrative interface on DC01 with the `ad.cyberlab.test` domain available following Domain Controller promotion. |
 
 ### Evidence Methodology
 
