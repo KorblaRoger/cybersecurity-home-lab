@@ -1,0 +1,320 @@
+================================================================================
+CYBERSECURITY HOME LAB
+EVIDENCE 013 - DC01 AD DS ROLE INSTALLATION AND PRE-PROMOTION VALIDATION
+================================================================================
+
+Project:
+01 - Virtual Network Lab
+
+System:
+DC01
+
+Operating System:
+Windows Server 2025 Standard (Desktop Experience)
+
+Purpose:
+Document the installation and verification of the Active Directory Domain
+Services (AD DS) role on DC01 before domain-controller promotion and creation
+of the ad.cyberlab.test Active Directory forest.
+
+================================================================================
+1. PRE-INSTALLATION STATE
+================================================================================
+
+DC01 entered this stage with the following validated baseline:
+
+Computer Name:
+DC01
+
+Computer Description:
+Windows Server - Cybersecurity Lab
+
+Current Membership:
+WORKGROUP
+
+Current Server Role:
+StandaloneServer
+
+IPv4 Address:
+10.10.10.10/24
+
+Network:
+VMnet2 LAB-LAN (10.10.10.0/24)
+
+Default Gateway:
+None
+
+IPv4 DNS Server:
+None manually configured
+
+VMnet2 Connectivity:
+Verified
+
+Planned Active Directory Forest Root Domain:
+ad.cyberlab.test
+
+At this point, DC01 had not been configured as a domain controller.
+
+================================================================================
+2. ACTIVE DIRECTORY NAMESPACE DESIGN
+================================================================================
+
+The following Active Directory DNS namespace was selected for the lab:
+
+Forest Root Domain:
+ad.cyberlab.test
+
+Planned Domain Controller:
+DC01
+
+Planned Domain Controller FQDN:
+dc01.ad.cyberlab.test
+
+The .test namespace was selected for this isolated lab environment rather than
+using an unowned public DNS domain.
+
+================================================================================
+3. PRE-AD DNS VERIFICATION
+================================================================================
+
+Command:
+
+Get-DnsClientServerAddress -InterfaceAlias "Ethernet0"
+
+Observed Result:
+
+InterfaceAlias  InterfaceIndex  AddressFamily  ServerAddresses
+--------------  --------------  -------------  ---------------
+Ethernet0       6               IPv4           {}
+Ethernet0       6               IPv6           {fec0:0:0:ffff::1,
+                                                fec0:0:0:ffff::2,
+                                                fec0:0:0:ffff::3}
+
+Interpretation:
+
+No IPv4 DNS server was manually configured on Ethernet0 before AD DS
+deployment.
+
+DNS configuration was intentionally deferred until the domain-controller and
+DNS deployment stage.
+
+================================================================================
+4. AD DS ROLE INSTALLATION
+================================================================================
+
+The Active Directory Domain Services role was installed using:
+
+Server Manager
+→ Add Roles and Features
+→ Role-based or feature-based installation
+→ DC01
+→ Active Directory Domain Services
+
+Windows automatically selected the required AD DS management components,
+including:
+
+- Group Policy Management
+- Remote Server Administration Tools
+- AD DS and AD LDS Tools
+- Active Directory module for Windows PowerShell
+- Active Directory Administrative Center
+- AD DS snap-ins and command-line tools
+
+No unrelated server roles or features were manually added.
+
+Automatic restart was disabled so that any required restart could be handled
+and documented deliberately.
+
+Installation Result:
+
+Configuration required. Installation succeeded on DC01.
+
+IMPORTANT:
+Installing the AD DS role did not promote DC01 to a domain controller.
+Domain-controller promotion remained a separate configuration step.
+
+================================================================================
+5. AD DS ROLE VERIFICATION
+================================================================================
+
+Command:
+
+Get-WindowsFeature AD-Domain-Services
+
+Observed Result:
+
+Display Name                              Name                 Install State
+------------                              ----                 -------------
+[X] Active Directory Domain Services      AD-Domain-Services   Installed
+
+Result:
+PASS
+
+Interpretation:
+
+The AD DS role binaries and associated management components were successfully
+installed on DC01.
+
+================================================================================
+6. PRE-PROMOTION SERVER ROLE VERIFICATION
+================================================================================
+
+Command:
+
+Get-ComputerInfo | Select-Object CsName, CsDomain, CsDomainRole
+
+Observed Result:
+
+CsName  CsDomain   CsDomainRole
+------  --------   ------------
+DC01    WORKGROUP  StandaloneServer
+
+Result:
+PASS
+
+Interpretation:
+
+DC01 remained a standalone WORKGROUP server after AD DS role installation.
+
+This verifies the distinction between:
+
+- Installing the AD DS server role
+- Promoting a Windows Server to a domain controller
+
+At this checkpoint, the first action was complete and the second had not yet
+been performed.
+
+================================================================================
+7. PRE-PROMOTION NETWORK VERIFICATION
+================================================================================
+
+Command:
+
+Get-NetIPConfiguration -InterfaceAlias "Ethernet0"
+
+Observed Result:
+
+InterfaceAlias       : Ethernet0
+InterfaceIndex       : 6
+InterfaceDescription : Intel(R) 82574L Gigabit Network Connection
+NetProfile.Name      : Unidentified network
+IPv4Address          : 10.10.10.10
+IPv6DefaultGateway   :
+IPv4DefaultGateway   :
+DNSServer            : fec0:0:0:ffff::1
+                       fec0:0:0:ffff::2
+                       fec0:0:0:ffff::3
+
+Result:
+PASS
+
+Interpretation:
+
+DC01 retained its planned static IPv4 address of 10.10.10.10.
+
+No IPv4 default gateway was configured because DC01 remained on the isolated
+VMnet2 LAB-LAN.
+
+No manually configured IPv4 DNS server was present at this stage.
+
+The "Unidentified network" profile was observed before domain-controller
+promotion and was not treated as a configuration failure.
+
+================================================================================
+8. PRE-PROMOTION CHECKPOINT
+================================================================================
+
+Final state before domain-controller promotion:
+
+Computer Name:
+DC01
+
+IPv4 Address:
+10.10.10.10/24
+
+Default Gateway:
+None
+
+Current Membership:
+WORKGROUP
+
+Current Server Role:
+StandaloneServer
+
+AD DS Role:
+Installed
+
+DNS Server Role:
+Not yet deployed as part of domain-controller configuration
+
+Active Directory Forest:
+Not yet created
+
+Domain Controller:
+No
+
+Planned Forest Root Domain:
+ad.cyberlab.test
+
+================================================================================
+9. KEY TECHNICAL OBSERVATIONS
+================================================================================
+
+1. Installing the AD DS role does not automatically make a Windows Server a
+   domain controller.
+
+2. A server can have the AD DS role binaries and management tools installed
+   while remaining a standalone WORKGROUP server.
+
+3. Domain-controller promotion is a separate configuration process that will
+   establish the Active Directory forest and domain.
+
+4. Active Directory depends heavily on DNS for locating domain controllers and
+   other AD services.
+
+5. Public DNS resolvers were not configured directly on DC01 before promotion.
+
+6. Static addressing was preserved because infrastructure services such as
+   Active Directory and DNS require predictable network addressing.
+
+7. Configuration was verified with PowerShell rather than relying solely on
+   Server Manager status messages.
+
+================================================================================
+10. NEXT STAGE
+================================================================================
+
+DC01 is ready for domain-controller promotion.
+
+Planned next actions:
+
+- Promote DC01 to a domain controller
+- Create a new Active Directory forest
+- Configure the forest root domain as ad.cyberlab.test
+- Deploy DNS as part of the domain-controller configuration
+- Configure the Directory Services Restore Mode (DSRM) password
+- Validate the NetBIOS domain name
+- Complete prerequisite checks
+- Restart DC01 after promotion
+- Verify Active Directory and DNS functionality
+- Verify DC01's post-promotion domain role and DNS configuration
+
+No domain-controller promotion had been performed at the time Evidence 013 was
+captured.
+
+================================================================================
+OVERALL RESULT
+================================================================================
+
+PASS
+
+The Active Directory Domain Services role was successfully installed and
+verified on DC01.
+
+DC01 remains a standalone WORKGROUP server and is in a validated
+pre-promotion state, ready for creation of the ad.cyberlab.test Active
+Directory forest.
+
+================================================================================
+END OF EVIDENCE 013
+================================================================================

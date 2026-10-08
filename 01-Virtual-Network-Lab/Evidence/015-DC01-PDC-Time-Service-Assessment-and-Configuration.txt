@@ -1,0 +1,1033 @@
+EVIDENCE 015
+DC01 PDC TIME SERVICE ASSESSMENT AND CONFIGURATION
+==================================================
+
+Project:
+Virtual Network Architecture & Security Lab
+
+Stage:
+Stage 5A - PDC Emulator Time Service Assessment and Configuration
+
+Systems:
+DC01
+UBUNTU01
+
+Date:
+October 4, 2026
+
+
+1. OBJECTIVE
+============
+
+Assess and correct the time synchronization architecture for the
+forest-root PDC Emulator (DC01) while preserving the existing isolated
+lab network design.
+
+Primary objectives:
+
+- Determine the existing Windows Time configuration on DC01.
+- Avoid providing DC01 direct Internet access.
+- Preserve DC01 as a single-homed domain controller on VMnet2.
+- Provide DC01 with a reliable upstream NTP source.
+- Use UBUNTU01 as a controlled NTP intermediary between external NTP
+  sources and the isolated Active Directory network.
+- Restrict NTP service exposure to the internal lab network.
+- Validate synchronization from both Ubuntu and Windows.
+- Correct any related time-display configuration issues discovered
+  during testing.
+
+
+2. EXISTING LAB ARCHITECTURE
+============================
+
+Internal Lab Network:
+VMnet2
+10.10.10.0/24
+
+DC01:
+10.10.10.10/24
+Single-homed on VMnet2
+No default gateway
+Role: Forest-root Domain Controller / DNS Server
+Domain: ad.cyberlab.test
+PDC Emulator: DC01
+
+UBUNTU01:
+VMnet2: 10.10.10.40/24
+VMnet8: DHCP-assigned NAT address
+
+UBUNTU01 is dual-homed but IPv4 forwarding remains disabled.
+
+The design intentionally prevents DC01 from directly accessing external
+networks.
+
+
+3. DC01 PRE-CONFIGURATION TIME BASELINE
+=======================================
+
+The Windows Time service was operational.
+
+Command:
+
+Get-Service W32Time
+
+Result:
+
+Status: Running
+
+
+Initial time status:
+
+w32tm /query /status
+
+Key results:
+
+Leap Indicator: 0 (no warning)
+Stratum: 1
+ReferenceId: 0x4C4F434C ("LOCL")
+Source: Local CMOS Clock
+Poll Interval: 6 (64s)
+
+Although Windows reported Stratum 1, the ReferenceId and source showed
+that DC01 was using its Local CMOS Clock.
+
+Therefore, the Stratum 1 description did not indicate that DC01 was
+synchronized to an actual external radio, atomic, or network reference.
+
+
+4. DC01 PRE-CONFIGURATION WINDOWS TIME SETTINGS
+================================================
+
+Command:
+
+w32tm /query /configuration
+
+Relevant initial configuration:
+
+NtpClient:
+Enabled: 1
+InputProvider: 1
+Type: NT5DS
+SpecialPollInterval: 1024
+
+NtpServer:
+Enabled: 1
+InputProvider: 0
+
+VMICTimeProvider:
+Enabled: 1
+InputProvider: 1
+
+Interpretation:
+
+DC01 was configured for NT5DS domain-hierarchy synchronization.
+
+Because DC01 is the forest-root PDC Emulator and the first/only domain
+controller, there was no higher domain controller from which it could
+obtain authoritative domain time.
+
+This resulted in DC01 relying on its local clock.
+
+
+5. VMWARE TIME SYNCHRONIZATION ASSESSMENT
+=========================================
+
+VMware Workstation settings for DC01 were inspected.
+
+VM Settings:
+Options -> VMware Tools
+
+Observed setting:
+
+Synchronize guest time with host: UNCHECKED
+VMware summary: Time sync off
+
+This confirmed that continuous VMware Tools guest/host time
+synchronization was not enabled.
+
+No VMware time synchronization setting was changed.
+
+
+6. TIME ARCHITECTURE DECISION
+=============================
+
+Rather than adding Internet connectivity to DC01, adding a default
+gateway, or dual-homing the domain controller, the following
+architecture was selected:
+
+External NTP Sources
+        |
+        v
+VMnet8 / VMware NAT
+        |
+        v
+UBUNTU01 / Chrony
+External NTP Client
+Internal NTP Server
+        |
+        | VMnet2
+        v
+DC01 / Forest-Root PDC Emulator
+        |
+        v
+Future Active Directory Domain Members
+
+This architecture preserves DC01's existing network isolation.
+
+UBUNTU01 communicates independently with:
+
+- External NTP sources through VMnet8.
+- DC01 through VMnet2.
+
+IPv4 forwarding is not required for this design.
+
+
+7. UBUNTU01 PRE-CHRONY TIME BASELINE
+====================================
+
+Before installing Chrony, UBUNTU01 used systemd-timesyncd.
+
+Command:
+
+timedatectl
+
+Relevant results:
+
+Time zone: America/Denver (MDT, -0600)
+System clock synchronized: yes
+NTP service: active
+RTC in local TZ: no
+
+
+Command:
+
+systemctl status systemd-timesyncd --no-pager
+
+Result:
+
+Active: active (running)
+
+The service reported initial synchronization to:
+
+91.189.91.157:123
+ntp.ubuntu.com
+
+
+Command:
+
+timedatectl timesync-status
+
+Relevant results:
+
+Server: 91.189.91.157 (ntp.ubuntu.com)
+Stratum: 2
+Leap: normal
+Offset: approximately -1.051 ms
+Delay: approximately 46.566 ms
+
+Conclusion:
+
+UBUNTU01 already had functional external NTP connectivity through
+VMnet8.
+
+
+8. EXISTING NTP SERVER PACKAGE CHECK
+====================================
+
+Commands:
+
+dpkg -l | grep -E 'chrony|ntpsec|^ii  ntp '
+
+systemctl list-unit-files | grep -E 'chrony|ntp'
+
+No matching Chrony, ntpsec, or traditional NTP server package/service
+was returned.
+
+systemd-timesyncd was providing client synchronization but was not being
+used as the lab NTP server.
+
+
+9. PACKAGE REPOSITORY VALIDATION
+================================
+
+Command:
+
+sudo apt update
+
+Ubuntu package repositories were reached successfully, including:
+
+- noble
+- noble-updates
+- noble-backports
+- noble-security
+
+Package lists were downloaded successfully.
+
+A broad system upgrade was intentionally not performed in order to
+avoid introducing unrelated changes into the lab baseline.
+
+
+10. CHRONY INSTALLATION
+=======================
+
+Command:
+
+sudo apt install chrony
+
+Installed version:
+
+chrony 4.5-1ubuntu4.2
+
+Chrony configuration files were created:
+
+/etc/chrony/chrony.conf
+/etc/chrony/chrony.keys
+
+The Chrony systemd service was enabled.
+
+
+11. TIME SERVICE HANDOFF VALIDATION
+===================================
+
+Command:
+
+systemctl status chrony --no-pager
+
+Result:
+
+chrony.service
+Active: active (running)
+
+
+Command:
+
+systemctl status systemd-timesyncd --no-pager
+
+Result:
+
+Loaded: masked
+Active: inactive (dead)
+
+systemd-timesyncd stopped successfully before Chrony assumed time
+synchronization responsibilities.
+
+This prevented competing Linux time synchronization services from
+managing the system clock simultaneously.
+
+
+12. CHRONY UPSTREAM SYNCHRONIZATION VALIDATION
+==============================================
+
+Commands:
+
+chronyc tracking
+
+chronyc sources -v
+
+Chrony successfully synchronized with external NTP sources.
+
+Example observed selected source:
+
+time.cloudflare.com
+
+Observed tracking state included:
+
+Leap status: Normal
+System clock offset: approximately 0.000105 seconds
+Multiple reachable external NTP sources
+
+The selected external source changed during later testing, which is
+normal behavior when Chrony evaluates available upstream sources.
+
+The design therefore does not depend on a specific external NTP server
+or IP address.
+
+
+13. CHRONY CONFIGURATION BACKUP
+===============================
+
+Before modifying the Chrony configuration, a backup was created.
+
+Command:
+
+sudo cp /etc/chrony/chrony.conf \
+/etc/chrony/chrony.conf.pre-lab-ntp
+
+Verification:
+
+ls -l /etc/chrony/chrony.conf*
+
+Both the active configuration and pre-lab-NTP backup were present.
+
+
+14. CHRONY INTERNAL CLIENT ACCESS CONFIGURATION
+===============================================
+
+The Chrony configuration was modified to permit NTP clients only from
+the internal cybersecurity lab subnet.
+
+Added to:
+
+/etc/chrony/chrony.conf
+
+Directive:
+
+allow 10.10.10.0/24
+
+This permits NTP service for systems on VMnet2 while avoiding broad
+client access.
+
+
+15. CHRONY CONFIGURATION VALIDATION
+===================================
+
+Command:
+
+sudo chronyd -p
+
+The configuration parsed successfully.
+
+The effective configuration included:
+
+allow 10.10.10.0/24
+
+No configuration syntax errors were reported.
+
+
+16. INITIAL NTP LISTENER VALIDATION
+===================================
+
+After restarting Chrony, the NTP socket was inspected.
+
+Command:
+
+sudo ss -lunp | grep ':123'
+
+Initial result after enabling client access:
+
+0.0.0.0:123
+
+This showed that Chrony was listening for NTP requests on all IPv4
+interfaces.
+
+Although the "allow 10.10.10.0/24" directive restricted which clients
+could use the service, an additional interface-level restriction was
+evaluated as defense in depth.
+
+
+17. CHRONY BINDADDRESS ASSESSMENT
+=================================
+
+The locally installed Chrony documentation was reviewed before changing
+the listening behavior.
+
+Command:
+
+man chrony.conf
+
+The bindaddress directive was reviewed.
+
+The documentation confirmed that bindaddress controls the local address
+on which chronyd listens for NTP requests.
+
+This was distinguished from bindacqaddress, which affects addresses used
+for Chrony's acquisition/client communication with upstream sources.
+
+Therefore, restricting the NTP server socket would not require
+restricting Chrony's upstream NTP acquisition to VMnet2.
+
+
+18. CHRONY INTERNAL INTERFACE BINDING
+=====================================
+
+The following directive was added:
+
+bindaddress 10.10.10.40
+
+Final lab-specific Chrony directives:
+
+allow 10.10.10.0/24
+bindaddress 10.10.10.40
+
+The configuration was parsed again:
+
+sudo chronyd -p
+
+No syntax errors were reported.
+
+Chrony was then restarted.
+
+
+19. FINAL NTP LISTENER VALIDATION
+=================================
+
+Command:
+
+sudo ss -lunp | grep ':123'
+
+Result:
+
+10.10.10.40:123
+
+Chrony was now listening for NTP requests specifically on UBUNTU01's
+VMnet2 IPv4 address rather than 0.0.0.0.
+
+Defense-in-depth controls:
+
+1. NTP server socket bound to 10.10.10.40.
+2. NTP clients restricted to 10.10.10.0/24.
+
+
+20. POST-BINDING UPSTREAM SYNCHRONIZATION
+========================================
+
+Command:
+
+chronyc tracking
+
+Observed result:
+
+Reference source: triton.ellipse.net
+Stratum: 3
+System time: approximately 0.001443 seconds fast
+Leap status: Normal
+
+Conclusion:
+
+Binding the NTP server socket to 10.10.10.40 did not interfere with
+Chrony's ability to synchronize with external NTP sources through
+VMnet8.
+
+
+21. DC01-TO-UBUNTU01 NTP CONNECTIVITY TEST
+==========================================
+
+Before modifying DC01's Windows Time configuration, direct NTP
+communication was tested.
+
+Command:
+
+w32tm /stripchart /computer:10.10.10.40 /dataonly /samples:5
+
+Result:
+
+Tracking 10.10.10.40 [10.10.10.40:123].
+Collecting 5 samples.
+
+Five successful samples were returned.
+
+Observed offsets were approximately:
+
+-0.3871193s
+-0.3937337s
+-0.3937275s
+-0.3937390s
+-0.3937573s
+
+Conclusion:
+
+DC01 could successfully query UBUNTU01's Chrony service over UDP/123
+across VMnet2 before any Windows Time configuration was changed.
+
+
+22. DC01 PRE-CHANGE PEER STATE
+==============================
+
+Command:
+
+w32tm /query /peers
+
+Result:
+
+#Peers: 1
+
+State: Pending
+Mode: 0 (reserved)
+Stratum: 0 (unspecified)
+
+There was no active usable external NTP peer.
+
+
+23. DC01 PDC EMULATOR NTP CONFIGURATION
+=======================================
+
+Command:
+
+w32tm /config /manualpeerlist:"10.10.10.40,0x8" \
+/syncfromflags:manual /reliable:yes /update
+
+Result:
+
+The command completed successfully.
+
+Configuration intent:
+
+10.10.10.40
+UBUNTU01 internal NTP server.
+
+0x8
+Use standard NTP client mode when communicating with the peer.
+
+syncfromflags:manual
+Use the manually specified upstream time source.
+
+reliable:yes
+Configure the PDC Emulator as a reliable Windows Time source for the
+domain.
+
+update
+Apply the updated Windows Time configuration.
+
+
+24. DC01 STORED CONFIGURATION VALIDATION
+=======================================
+
+Command:
+
+w32tm /query /configuration
+
+Relevant post-change results:
+
+AnnounceFlags: 5
+
+NtpClient:
+Enabled: 1
+InputProvider: 1
+Type: NTP
+NtpServer: 10.10.10.40,0x8
+
+NtpServer:
+Enabled: 1
+InputProvider: 0
+
+The initial Type value of NT5DS had changed to NTP.
+
+The manually configured peer was stored correctly.
+
+
+25. WINDOWS TIME SERVICE RESTART
+================================
+
+Command:
+
+Restart-Service W32Time
+
+Verification:
+
+Get-Service W32Time
+
+Result:
+
+Status: Running
+Name: W32Time
+DisplayName: Windows Time
+
+
+26. FORCED REDISCOVERY AND RESYNCHRONIZATION
+============================================
+
+Command:
+
+w32tm /resync /rediscover
+
+Result:
+
+Sending resync command to local computer
+The command completed successfully.
+
+
+27. ACTIVE TIME SOURCE VALIDATION
+=================================
+
+Command:
+
+w32tm /query /source
+
+Result:
+
+10.10.10.40,0x8
+
+This confirmed that DC01 moved away from Local CMOS Clock and selected
+UBUNTU01 as its active upstream NTP source.
+
+
+28. DC01 SYNCHRONIZATION STATUS
+===============================
+
+Command:
+
+w32tm /query /status
+
+Result:
+
+Leap Indicator: 0 (no warning)
+Stratum: 4 (secondary reference - syncd by (S)NTP)
+Precision: -23
+Root Delay: 0.0554865s
+Root Dispersion: 1.7843850s
+ReferenceId: 0x0A0A0A28
+Source IP: 10.10.10.40
+Last Successful Sync Time: 10/4/2026 1:06:09 AM
+Source: 10.10.10.40,0x8
+Poll Interval: 6 (64s)
+
+Conclusion:
+
+DC01 successfully synchronized with UBUNTU01.
+
+The ReferenceId directly identified 10.10.10.40 as the upstream source.
+
+
+29. FINAL PEER VALIDATION
+=========================
+
+Command:
+
+w32tm /query /peers
+
+Result:
+
+#Peers: 1
+
+Peer: 10.10.10.40,0x8
+State: Active
+Mode: 3 (Client)
+Stratum: 3 (secondary reference - syncd by (S)NTP)
+PeerPoll Interval: 6 (64s)
+HostPoll Interval: 6 (64s)
+
+The peer changed from the original Pending/reserved state to:
+
+- Active
+- Client mode
+- Valid upstream Stratum 3 peer
+
+
+30. LOCAL TIME DISPLAY DISCREPANCY
+=================================
+
+After NTP synchronization was validated, DC01's displayed local time was
+observed to be approximately one hour behind the host system.
+
+Because NTP synchronization was already healthy, the Windows time zone
+was investigated before making any changes to NTP.
+
+
+31. DC01 TIME ZONE INVESTIGATION
+================================
+
+Command:
+
+Get-TimeZone
+
+Initial result:
+
+Id: Pacific Standard Time
+DisplayName: (UTC-08:00) Pacific Time (US & Canada)
+StandardName: Pacific Standard Time
+DaylightName: Pacific Daylight Time
+BaseUtcOffset: -08:00:00
+SupportsDaylightSavingTime: True
+
+Root cause:
+
+DC01 was configured for Pacific Time instead of the lab's Mountain Time
+zone.
+
+The one-hour displayed-time discrepancy was therefore a time-zone issue,
+not an NTP synchronization failure.
+
+
+32. DC01 TIME ZONE CORRECTION
+=============================
+
+Command:
+
+Set-TimeZone -Id "Mountain Standard Time"
+
+Verification:
+
+Get-TimeZone
+
+Result:
+
+Id: Mountain Standard Time
+DisplayName: (UTC-07:00) Mountain Time (US & Canada)
+StandardName: Mountain Standard Time
+DaylightName: Mountain Daylight Time
+BaseUtcOffset: -07:00:00
+SupportsDaylightSavingTime: True
+
+The clock was not manually changed.
+
+Windows applied the appropriate local time display based on the
+corrected time zone and daylight-saving rules.
+
+
+33. FINAL LOCAL TIME AND NTP VALIDATION
+=======================================
+
+Commands:
+
+Get-Date
+
+w32tm /query /source
+
+Results:
+
+Sunday, October 4, 2026 2:12:15 AM
+
+NTP Source:
+
+10.10.10.40,0x8
+
+The displayed DC01 time now aligned with the host's Mountain local time
+while the configured NTP source remained unchanged.
+
+
+34. FINAL ARCHITECTURE
+======================
+
+External NTP Sources
+        |
+        | Internet / VMnet8
+        v
+UBUNTU01
+Chrony NTP Client/Server
+VMnet2: 10.10.10.40
+        |
+        | UDP/123
+        | allow 10.10.10.0/24
+        | bindaddress 10.10.10.40
+        v
+DC01
+10.10.10.10
+Forest-Root PDC Emulator
+        |
+        | Windows domain time hierarchy
+        v
+Future Domain Members
+
+
+35. SECURITY AND ARCHITECTURAL OBSERVATIONS
+===========================================
+
+- DC01 remains single-homed on VMnet2.
+
+- DC01 still has no default gateway.
+
+- No direct Internet access was added to the domain controller.
+
+- UBUNTU01 remains the controlled dual-homed system.
+
+- IPv4 forwarding was not required or enabled for NTP synchronization.
+
+- Chrony obtains upstream time independently through VMnet8.
+
+- Chrony serves internal NTP through VMnet2.
+
+- Chrony's NTP server socket is bound specifically to 10.10.10.40.
+
+- Client access is restricted to the 10.10.10.0/24 internal lab subnet.
+
+- Windows Time communicates with Chrony using NTP client mode.
+
+- DC01 is configured as the reliable time source for future domain
+  members.
+
+- VMware continuous guest/host time synchronization remains disabled.
+
+- No firewall was disabled to establish NTP communication.
+
+- No manual clock adjustment was required.
+
+
+36. TROUBLESHOOTING LESSONS
+===========================
+
+1. A Windows Time status showing Stratum 1 does not by itself prove that
+   a system is synchronized with an authoritative external source.
+
+   The ReferenceId and Source fields must also be examined.
+
+   In the original DC01 state:
+
+   ReferenceId: LOCL
+   Source: Local CMOS Clock
+
+2. Successful NTP synchronization and correct displayed local time are
+   separate concerns.
+
+   NTP establishes the underlying time reference.
+
+   The operating system's time-zone and daylight-saving configuration
+   determine how that time is displayed locally.
+
+3. A one-hour clock discrepancy should not automatically be treated as
+   an NTP failure.
+
+   In this case, NTP was healthy and the root cause was an incorrect
+   Pacific Time configuration on DC01.
+
+4. Service exposure can be reduced with multiple controls.
+
+   Chrony's "allow" directive restricts permitted client networks, while
+   "bindaddress" restricts the local interface/address on which the NTP
+   server listens.
+
+5. bindaddress and bindacqaddress serve different purposes.
+
+   The server-side listening address was restricted without preventing
+   Chrony from acquiring upstream time through UBUNTU01's other network
+   interface.
+
+6. A dual-homed system does not need to perform IP forwarding simply to
+   provide an application-layer service independently on its interfaces.
+
+   UBUNTU01 can obtain NTP through VMnet8 and serve NTP through VMnet2
+   without routing DC01's traffic to the Internet.
+
+
+37. BEFORE / AFTER SUMMARY
+==========================
+
+BEFORE:
+
+DC01 source:
+Local CMOS Clock
+
+DC01 client type:
+NT5DS
+
+Peer state:
+Pending
+
+Peer mode:
+Reserved
+
+External upstream source:
+None
+
+Displayed time zone:
+Pacific Time
+
+DC01 Internet connectivity:
+None
+
+
+AFTER:
+
+DC01 source:
+10.10.10.40,0x8
+
+DC01 client type:
+NTP
+
+Peer state:
+Active
+
+Peer mode:
+Client
+
+DC01 stratum:
+4
+
+Upstream intermediary:
+UBUNTU01 / Chrony
+
+Chrony internal listener:
+10.10.10.40:123/UDP
+
+Allowed NTP client network:
+10.10.10.0/24
+
+Displayed time zone:
+Mountain Time
+
+DC01 Internet connectivity:
+Still none
+
+
+38. FINAL VALIDATION SUMMARY
+============================
+
+[PASS] Windows Time service operational on DC01
+
+[PASS] Initial Local CMOS Clock condition identified
+
+[PASS] VMware continuous guest/host synchronization disabled
+
+[PASS] UBUNTU01 external NTP synchronization validated
+
+[PASS] Chrony installed successfully
+
+[PASS] systemd-timesyncd cleanly replaced by Chrony
+
+[PASS] Chrony upstream synchronization validated
+
+[PASS] Original Chrony configuration backed up
+
+[PASS] Internal NTP client subnet restricted to 10.10.10.0/24
+
+[PASS] NTP server socket bound to 10.10.10.40
+
+[PASS] Chrony configuration syntax validated
+
+[PASS] UDP/123 listener validated
+
+[PASS] DC01 successfully queried UBUNTU01 before reconfiguration
+
+[PASS] DC01 configured to use 10.10.10.40 as manual NTP peer
+
+[PASS] DC01 configured as reliable domain time source
+
+[PASS] Windows Time service restarted successfully
+
+[PASS] NTP rediscovery/resynchronization completed successfully
+
+[PASS] DC01 active source changed from Local CMOS Clock to 10.10.10.40
+
+[PASS] DC01 peer state Active
+
+[PASS] DC01 peer mode Client
+
+[PASS] DC01 successful synchronization confirmed
+
+[PASS] One-hour local-time discrepancy investigated
+
+[PASS] Root cause identified as incorrect Pacific time zone
+
+[PASS] DC01 corrected to Mountain Time
+
+[PASS] NTP synchronization remained intact after time-zone correction
+
+[PASS] DC01 remains isolated with no default gateway
+
+[PASS] IPv4 forwarding not required
+
+[PASS] Stage 5A PDC Emulator Time Service Configuration COMPLETE
+
+
+39. FINAL STATUS
+================
+
+PASS
+
+The forest-root PDC Emulator now obtains synchronized time from a
+controlled internal NTP source while preserving the lab's network
+isolation and least-exposure design.
+
+UBUNTU01 synchronizes with external NTP sources through VMnet8 and
+provides NTP service to the internal VMnet2 network through
+10.10.10.40:123/UDP.
+
+DC01 synchronizes with UBUNTU01 without requiring direct Internet
+connectivity, an additional network interface, a default gateway, or
+IPv4 forwarding.
+
+The previously observed PDC Emulator local-clock condition has been
+resolved, and the subsequent one-hour displayed-time discrepancy was
+correctly identified and resolved as a Windows time-zone configuration
+issue rather than an NTP failure.
+
+Stage 5A is COMPLETE / PASS.

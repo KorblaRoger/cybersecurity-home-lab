@@ -1,0 +1,341 @@
+Evidence 011 - UBUNTU01 Dual-NIC Network Validation
+====================================================
+
+Stage:
+3D - Dual-Homed Ubuntu Networking
+
+Purpose:
+Document and validate UBUNTU01 after adding a second VMware network
+adapter connected to VMnet8 while preserving the existing VMnet2
+internal lab interface.
+
+Network Architecture:
+---------------------
+
+Interface: ens33
+VMware Network: VMnet2
+IPv4 Address: 10.10.10.40/24
+Purpose: Internal cybersecurity lab communication
+Default Gateway: None
+DNS: None
+
+Interface: ens37
+VMware Network: VMnet8
+IPv4 Address: 192.168.112.142/24
+Purpose: NAT/external network connectivity
+IPv4 Configuration: DHCP
+Default Gateway: 192.168.112.2
+DNS Server: 192.168.112.2
+
+
+Routing Validation:
+-------------------
+
+The routing table contained:
+
+- A directly connected route for 10.10.10.0/24 through ens33.
+- A directly connected route for 192.168.112.0/24 through ens37.
+- A DHCP-provided default route through 192.168.112.2 on ens37.
+
+Route lookup for 8.8.8.8 selected:
+
+Gateway: 192.168.112.2
+Interface: ens37
+Source IPv4: 192.168.112.142
+
+This verified that external IPv4 traffic uses the VMnet8 interface.
+
+
+Internal Connectivity Validation:
+---------------------------------
+
+UBUNTU01 successfully pinged the Windows VMnet2 adapter:
+
+Destination: 10.10.10.1
+Packets transmitted: 4
+Packets received: 4
+Packet loss: 0%
+
+This confirmed that adding the VMnet8 adapter did not disrupt
+communication over the internal VMnet2 network.
+
+
+External IPv4 Validation:
+-------------------------
+
+UBUNTU01 successfully pinged 8.8.8.8 through the VMnet8 NAT path:
+
+Packets transmitted: 4
+Packets received: 4
+Packet loss: 0%
+
+This confirmed external IPv4 connectivity through ens37.
+
+
+DNS Validation:
+---------------
+
+The command:
+
+resolvectl query google.com
+
+successfully resolved IPv4 and IPv6 addresses for google.com.
+
+systemd-resolved identified ens37 as the link used for the DNS
+resolution.
+
+The active DNS server for ens37 was:
+
+192.168.112.2
+
+
+Hostname Connectivity Validation:
+---------------------------------
+
+The command:
+
+ping -c 4 google.com
+
+successfully resolved google.com and received four ICMP replies.
+
+Packets transmitted: 4
+Packets received: 4
+Packet loss: 0%
+
+
+HTTPS Validation:
+-----------------
+
+The command:
+
+curl -I https://www.google.com
+
+returned:
+
+HTTP/2 200
+
+This confirmed successful DNS resolution, routing, TCP connectivity,
+TLS/HTTPS communication, and receipt of an HTTP response from an
+external service.
+
+
+Final Verified State:
+---------------------
+
+UBUNTU01 is dual-homed with two operational network interfaces.
+
+ens33:
+- VMnet2
+- 10.10.10.40/24
+- Internal lab communication
+- No default gateway
+- No DNS configuration
+
+ens37:
+- VMnet8
+- 192.168.112.142/24
+- DHCP configured
+- Default gateway 192.168.112.2
+- DNS server 192.168.112.2
+- External connectivity
+
+Internal VMnet2 connectivity remains operational while external
+traffic is routed through VMnet8.
+
+
+Security Observation:
+---------------------
+
+A dual-homed system is connected to more than one network and therefore
+creates an important security consideration.
+
+UBUNTU01 currently has connectivity to both the isolated VMnet2 lab
+network and the internet-enabled VMnet8 network.
+
+This does not automatically make UBUNTU01 a router. Traffic is not
+automatically forwarded between ens33 and ens37 simply because both
+interfaces are present.
+
+However, a dual-homed system can become a potential path between
+networks if packet forwarding, routing, NAT, bridging, proxying, or
+other forwarding services are deliberately or accidentally enabled.
+
+Future security exercises should therefore consider interface roles,
+IP forwarding state, firewall policy, routing, and network segmentation.
+
+
+Stage Result:
+-------------
+
+Stage 3D Dual-Homed Ubuntu Networking: PASS
+
+
+Raw Command Output
+==================
+emrok@emrok-ubuntu01:~$ ip route
+default via 192.168.112.2 dev ens37 proto dhcp metric 101 
+10.10.10.0/24 dev ens33 proto kernel scope link src 10.10.10.40 metric 100 
+169.254.0.0/16 dev ens33 scope link metric 1000 
+192.168.112.0/24 dev ens37 proto kernel scope link src 192.168.112.142 metric 101 
+
+emrok@emrok-ubuntu01:~$ nmcli -f GENERAL,IP4 device show ens37
+GENERAL.DEVICE:                         ens37
+GENERAL.TYPE:                           ethernet
+GENERAL.NM-TYPE:                        NMDeviceEthernet
+GENERAL.DBUS-PATH:                      /org/freedesktop/NetworkManager/Devices/3
+GENERAL.VENDOR:                         Intel Corporation
+GENERAL.PRODUCT:                        82545EM Gigabit Ethernet Controller (Copper) (PRO/1000 MT Single Port Adapter)
+GENERAL.DRIVER:                         e1000
+GENERAL.DRIVER-VERSION:                 6.8.0-138-generic
+GENERAL.FIRMWARE-VERSION:               --
+GENERAL.HWADDR:                         00:0C:29:03:53:9C
+GENERAL.MTU:                            1500
+GENERAL.STATE:                          100 (connected)
+GENERAL.REASON:                         0 (No reason given)
+GENERAL.IP4-CONNECTIVITY:               4 (full)
+GENERAL.IP6-CONNECTIVITY:               3 (limited)
+GENERAL.UDI:                            /sys/devices/pci0000:00/0000:00:11.0/0000:02:05.0/net/ens37
+GENERAL.PATH:                           pci-0000:02:05.0
+GENERAL.IP-IFACE:                       ens37
+GENERAL.IS-SOFTWARE:                    no
+GENERAL.NM-MANAGED:                     yes
+GENERAL.AUTOCONNECT:                    yes
+GENERAL.FIRMWARE-MISSING:               no
+GENERAL.NM-PLUGIN-MISSING:              no
+GENERAL.PHYS-PORT-ID:                   --
+GENERAL.CONNECTION:                     Wired connection 2
+GENERAL.CON-UUID:                       95dd2839-5bd6-3f5c-aadc-3d6758d0571c
+GENERAL.CON-PATH:                       /org/freedesktop/NetworkManager/ActiveConnection/2
+GENERAL.METERED:                        no (guessed)
+IP4.ADDRESS[1]:                         192.168.112.142/24
+IP4.GATEWAY:                            192.168.112.2
+IP4.ROUTE[1]:                           dst = 192.168.112.0/24, nh = 0.0.0.0, mt = 101
+IP4.ROUTE[2]:                           dst = 0.0.0.0/0, nh = 192.168.112.2, mt = 101
+IP4.DNS[1]:                             192.168.112.2
+IP4.DOMAIN[1]:                          localdomain
+
+emrok@emrok-ubuntu01:~$ resolvectl status
+Global
+       Protocols: -LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+resolv.conf mode: stub
+
+Link 2 (ens33)
+Current Scopes: none
+     Protocols: -DefaultRoute +LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+
+Link 3 (ens37)
+    Current Scopes: DNS
+         Protocols: +DefaultRoute +LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+Current DNS Server: 192.168.112.2
+       DNS Servers: 192.168.112.2
+        DNS Domain: localdomain
+
+emrok@emrok-ubuntu01:~$ ip route get 8.8.8.8
+8.8.8.8 via 192.168.112.2 dev ens37 src 192.168.112.142 uid 1000 
+    cache 
+
+emrok@emrok-ubuntu01:~$ ping -c 4 10.10.10.1
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+64 bytes from 10.10.10.1: icmp_seq=1 ttl=128 time=0.321 ms
+64 bytes from 10.10.10.1: icmp_seq=2 ttl=128 time=0.746 ms
+64 bytes from 10.10.10.1: icmp_seq=3 ttl=128 time=0.490 ms
+64 bytes from 10.10.10.1: icmp_seq=4 ttl=128 time=0.472 ms
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3110ms
+rtt min/avg/max/mdev = 0.321/0.507/0.746/0.152 ms
+
+emrok@emrok-ubuntu01:~$ ping -c 4 8.8.8.8
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=128 time=34.1 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=128 time=11.5 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=128 time=10.2 ms
+64 bytes from 8.8.8.8: icmp_seq=4 ttl=128 time=7.52 ms
+
+--- 8.8.8.8 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 7.521/15.833/34.060/10.621 ms
+
+emrok@emrok-ubuntu01:~$ resolvectl query google.com
+google.com: 209.85.145.113                     -- link: ens37
+            209.85.145.100                     -- link: ens37
+            209.85.145.101                     -- link: ens37
+            209.85.145.102                     -- link: ens37
+            209.85.145.139                     -- link: ens37
+            209.85.145.138                     -- link: ens37
+            2607:f8b0:4001:c1e::71             -- link: ens37
+            2607:f8b0:4001:c1e::65             -- link: ens37
+            2607:f8b0:4001:c1e::66             -- link: ens37
+            2607:f8b0:4001:c1e::8a             -- link: ens37
+
+-- Information acquired via protocol DNS in 15.0ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: no
+-- Data from: network
+
+emrok@emrok-ubuntu01:~$ ping -c 4 google.com
+PING google.com (209.85.145.102) 56(84) bytes of data.
+64 bytes from jd-in-f102.1e100.net (209.85.145.102): icmp_seq=1 ttl=128 time=26.1 ms
+64 bytes from jd-in-f102.1e100.net (209.85.145.102): icmp_seq=2 ttl=128 time=20.0 ms
+64 bytes from jd-in-f102.1e100.net (209.85.145.102): icmp_seq=3 ttl=128 time=27.8 ms
+64 bytes from jd-in-f102.1e100.net (209.85.145.102): icmp_seq=4 ttl=128 time=24.4 ms
+
+--- google.com ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3003ms
+rtt min/avg/max/mdev = 19.993/24.580/27.792/2.908 ms
+
+emrok@emrok-ubuntu01:~$ curl -I https://www.google.com
+HTTP/2 200 
+content-type: text/html; charset=ISO-8859-1
+content-security-policy-report-only: object-src 'none';base-uri 'self';script-src 'nonce-N4p8cbb3y6C8vruVWNgBew' 'strict-dynamic' 'report-sample' 'unsafe-eval' 'unsafe-inline' https: http:;report-uri https://csp.withgoogle.com/csp/gws/other-hp
+accept-ch: Sec-CH-Prefers-Color-Scheme
+p3p: CP="This is not a P3P policy! See g.co/p3phelp for more info."
+date: Thu, 17 Sep 2026 15:44:51 GMT
+server: gws
+x-xss-protection: 0
+x-frame-options: SAMEORIGIN
+expires: Thu, 17 Sep 2026 15:44:51 GMT
+cache-control: private
+set-cookie: __Secure-STRP=ANmZwa1GV9xy0wzghV0tJHNx3hsUE-EjYz5AWA9PGKVa4p8wmrMhfnMB90liCld8xXDbi-5YVJ2a2L6uxR-RzcpjgfuJpLW4r8wj; expires=Thu, 17-Sep-2026 15:49:51 GMT; path=/; domain=.google.com; Secure; SameSite=strict
+set-cookie: AEC=Aaa9EJpE47TBuqTRq7iU5OUPAii63Ms-Bt7Ap10YpBcILx2t2Gig3gM99w; expires=Tue, 16-Mar-2027 15:44:51 GMT; path=/; domain=.google.com; Secure; HttpOnly; SameSite=lax
+set-cookie: NID=CvABCAESogEBp2sxrs9iILNFGH_SguKDak81-j6nyJBkKGJs90G2Jr6GN36wB8-CxxP2nj3m1hfgl1fWfYwbo7wFCuWgpyWPfDqgcKH1yCjMwZogsUkXL4HeSFQSinZwmlW3GFxws-ulwfwNtf7WE0Yf8y01_fMlTMd6Q2VpYF_kwnDXkXO3dMVQjzRJ08zgVkpu-S3nBUY4yqFOEV3JASgeJ6GEYlrzLsYoATJFAQ4r3hGrBkAbywi4b84vvW9oZ9qrY8ikX1tgWyJmAyvcI0CFy1294dGNEQ81qNcrtacsjbF0vM5XZS8xIzPqCdL-mcwB; expires=Fri, 19-Mar-2027 15:44:51 GMT; path=/; domain=.google.com; HttpOnly
+alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+
+
+IPv4 Forwarding Validation:
+---------------------------
+
+The current Linux IPv4 forwarding state was verified using:
+
+sysctl net.ipv4.ip_forward
+
+Result:
+
+net.ipv4.ip_forward = 0
+
+The same kernel state was independently verified through:
+
+cat /proc/sys/net/ipv4/ip_forward
+
+Result:
+
+0
+
+These results confirm that IPv4 packet forwarding is currently
+disabled.
+
+Although UBUNTU01 is dual-homed and has interfaces connected to both
+VMnet2 and VMnet8, the system is not currently configured to perform
+normal IPv4 routing between the two networks.
+
+This demonstrates an important distinction between a multihomed host
+and a router. A system may be connected to multiple networks without
+automatically forwarding packets between them.
+
+
+Raw Command Output
+==================
+emrok@emrok-ubuntu01:~$ sysctl net.ipv4.ip_forward
+net.ipv4.ip_forward = 0
+
+emrok@emrok-ubuntu01:~$ cat /proc/sys/net/ipv4/ip_forward
+0

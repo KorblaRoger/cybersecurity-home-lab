@@ -1,0 +1,94 @@
+PROJECT 01 — VIRTUAL NETWORK LAB
+Evidence 003: VMware Network Discovery
+
+Objective:
+Identify the IPv4 addressing and routing configuration of VMware
+virtual network adapters before redesigning the home lab.
+
+Observed VMware Networks:
+
+VMnet1
+Host Address: 192.168.241.1/24
+Network:      192.168.241.0/24
+
+VMnet2
+Host Address: 192.168.117.1/24
+Network:      192.168.117.0/24
+
+VMnet3
+Host Address: 192.168.128.1/24
+Network:      192.168.128.0/24
+
+VMnet8
+Host Address: 192.168.112.1/24
+Network:      192.168.112.0/24
+
+Observation:
+Each VMware network appears as a directly connected network on
+the Windows host. No default gateway is configured on the VMware
+host adapters.
+
+Important:
+The "DHCP Enabled: No" value shown by ipconfig applies to the
+Windows host adapter. It does not establish whether VMware's
+DHCP service is enabled for guest virtual machines.
+
+
+
+RESULT
+PS C:\WINDOWS\system32> Get-NetIPAddress |
+>> Where-Object {$_.InterfaceAlias -like "*VMware*"} |
+>> Select-Object InterfaceAlias,IPAddress,PrefixLength
+
+InterfaceAlias                IPAddress                   PrefixLength
+--------------                ---------                   ------------
+VMware Network Adapter VMnet8 fe80::c430:ef18:5e34:29%15            64
+VMware Network Adapter VMnet3 fe80::be3e:c120:7d44:6e17%8           64
+VMware Network Adapter VMnet2 fe80::17d8:9932:953:513e%2            64
+VMware Network Adapter VMnet1 fe80::791c:d91f:f836:e8ba%5           64
+VMware Network Adapter VMnet8 192.168.112.1                         24
+VMware Network Adapter VMnet3 192.168.128.1                         24
+VMware Network Adapter VMnet2 192.168.117.1                         24
+VMware Network Adapter VMnet1 192.168.241.1                         24
+
+
+PS C:\WINDOWS\system32> Get-NetRoute |
+>> Where-Object {$_.InterfaceAlias -like "*VMware*"} |
+>> Select-Object InterfaceAlias,DestinationPrefix,NextHop,RouteMetric
+
+InterfaceAlias                DestinationPrefix             NextHop RouteMetric
+--------------                -----------------             ------- -----------
+VMware Network Adapter VMnet8 255.255.255.255/32            0.0.0.0         256
+VMware Network Adapter VMnet3 255.255.255.255/32            0.0.0.0         256
+VMware Network Adapter VMnet2 255.255.255.255/32            0.0.0.0         256
+VMware Network Adapter VMnet1 255.255.255.255/32            0.0.0.0         256
+VMware Network Adapter VMnet8 224.0.0.0/4                   0.0.0.0         256
+VMware Network Adapter VMnet3 224.0.0.0/4                   0.0.0.0         256
+VMware Network Adapter VMnet2 224.0.0.0/4                   0.0.0.0         256
+VMware Network Adapter VMnet1 224.0.0.0/4                   0.0.0.0         256
+VMware Network Adapter VMnet1 192.168.241.255/32            0.0.0.0         256
+VMware Network Adapter VMnet1 192.168.241.1/32              0.0.0.0         256
+VMware Network Adapter VMnet1 192.168.241.0/24              0.0.0.0         256
+VMware Network Adapter VMnet3 192.168.128.255/32            0.0.0.0         256
+VMware Network Adapter VMnet3 192.168.128.1/32              0.0.0.0         256
+VMware Network Adapter VMnet3 192.168.128.0/24              0.0.0.0         256
+VMware Network Adapter VMnet2 192.168.117.255/32            0.0.0.0         256
+VMware Network Adapter VMnet2 192.168.117.1/32              0.0.0.0         256
+VMware Network Adapter VMnet2 192.168.117.0/24              0.0.0.0         256
+VMware Network Adapter VMnet8 192.168.112.255/32            0.0.0.0         256
+VMware Network Adapter VMnet8 192.168.112.1/32              0.0.0.0         256
+VMware Network Adapter VMnet8 192.168.112.0/24              0.0.0.0         256
+VMware Network Adapter VMnet8 ff00::/8                      ::              256
+VMware Network Adapter VMnet3 ff00::/8                      ::              256
+VMware Network Adapter VMnet2 ff00::/8                      ::              256
+VMware Network Adapter VMnet1 ff00::/8                      ::              256
+VMware Network Adapter VMnet8 fe80::c430:ef18:5e34:29/128   ::              256
+VMware Network Adapter VMnet3 fe80::be3e:c120:7d44:6e17/128 ::              256
+VMware Network Adapter VMnet1 fe80::791c:d91f:f836:e8ba/128 ::              256
+VMware Network Adapter VMnet2 fe80::17d8:9932:953:513e/128  ::              256
+VMware Network Adapter VMnet8 fe80::/64                     ::              256
+VMware Network Adapter VMnet3 fe80::/64                     ::              256
+VMware Network Adapter VMnet2 fe80::/64                     ::              256
+VMware Network Adapter VMnet1 fe80::/64                     ::              256
+
+

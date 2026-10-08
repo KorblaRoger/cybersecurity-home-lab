@@ -1,0 +1,654 @@
+======================================================================
+PROJECT: VIRTUAL NETWORK ARCHITECTURE & SECURITY LAB
+EVIDENCE FILE: 009-Windows-VMnet2-Connectivity-and-Firewall.txt
+======================================================================
+
+STAGE:
+3C - VMnet2 Static Host-Only Networking
+
+SYSTEM:
+Windows Host
+
+PURPOSE:
+Verify the Windows host-side VMnet2 network configuration, Layer 2
+and Layer 3 connectivity with UBUNTU01, investigate the failed
+Ubuntu-to-Windows ICMP test, and document the scoped Windows Firewall
+configuration used to permit ICMPv4 Echo Requests from the lab
+network.
+
+VMNET2 NETWORK:
+10.10.10.0/24
+
+WINDOWS VMNET2 ADDRESS:
+10.10.10.1/24
+
+UBUNTU01 ADDRESS:
+10.10.10.40/24
+
+
+======================================================================
+1. VERIFY WINDOWS VMNET2 IPV4 CONFIGURATION
+======================================================================
+
+Command:
+
+Get-NetIPAddress -InterfaceAlias "VMware Network Adapter VMnet2" `
+-AddressFamily IPv4
+
+Output:
+
+IPAddress         : 10.10.10.1
+InterfaceIndex    : 2
+InterfaceAlias    : VMware Network Adapter VMnet2
+AddressFamily     : IPv4
+Type              : Unicast
+PrefixLength      : 24
+PrefixOrigin      : Manual
+SuffixOrigin      : Manual
+AddressState      : Preferred
+ValidLifetime     : Infinite ([TimeSpan]::MaxValue)
+PreferredLifetime : Infinite ([TimeSpan]::MaxValue)
+SkipAsSource      : False
+PolicyStore       : ActiveStore
+
+Observation:
+
+The Windows VMware VMnet2 host adapter was configured with the
+manual IPv4 address:
+
+10.10.10.1/24
+
+The address state was Preferred, confirming that Windows considered
+the address valid and usable.
+
+PrefixOrigin and SuffixOrigin were Manual, confirming that the
+address was statically configured rather than assigned through DHCP.
+
+
+======================================================================
+2. VERIFY VMNET2 ADAPTER STATUS AND MAC ADDRESS
+======================================================================
+
+Command:
+
+Get-NetAdapter -Name "VMware Network Adapter VMnet2" |
+Select-Object Name,Status,MacAddress,LinkSpeed,InterfaceDescription
+
+Output:
+
+Name                 : VMware Network Adapter VMnet2
+Status               : Up
+MacAddress           : [REDACTED]
+LinkSpeed            : 100 Mbps
+InterfaceDescription : VMware Virtual Ethernet Adapter for VMnet2
+
+Observation:
+
+The VMware VMnet2 virtual Ethernet adapter was operational with a
+status of Up.
+
+The adapter was identified as:
+
+VMware Virtual Ethernet Adapter for VMnet2
+
+The adapter MAC address was:
+
+[REDACTED]
+
+This MAC address matched the Layer 2 neighbor address learned by
+UBUNTU01 for IPv4 address 10.10.10.1.
+
+This confirmed that UBUNTU01 was resolving the correct Windows
+VMnet2 virtual adapter through ARP.
+
+The adapter reported a virtual link speed of 100 Mbps.
+
+Result:
+
+PASS
+
+
+======================================================================
+3. VERIFY WINDOWS-TO-UBUNTU CONNECTIVITY
+======================================================================
+
+Command:
+
+ping 10.10.10.40
+
+Output:
+
+Pinging 10.10.10.40 with 32 bytes of data:
+Reply from 10.10.10.40: bytes=32 time<1ms TTL=64
+Reply from 10.10.10.40: bytes=32 time<1ms TTL=64
+Reply from 10.10.10.40: bytes=32 time=1ms TTL=64
+Reply from 10.10.10.40: bytes=32 time<1ms TTL=64
+
+Ping statistics for 10.10.10.40:
+    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),
+
+Approximate round trip times in milli-seconds:
+    Minimum = 0ms, Maximum = 1ms, Average = 0ms
+
+Result:
+
+PASS - 4 packets transmitted, 4 received, 0% packet loss.
+
+Observation:
+
+The Windows host successfully communicated with UBUNTU01 at
+10.10.10.40.
+
+This demonstrated that:
+
+- VMnet2 was operational.
+- The Windows host could reach UBUNTU01.
+- UBUNTU01's static IPv4 configuration was functioning.
+- Local-subnet communication was possible without a router or
+  default gateway.
+
+
+======================================================================
+4. VERIFY WINDOWS ARP RESOLUTION FOR UBUNTU01
+======================================================================
+
+Command:
+
+arp -a
+
+Relevant Output:
+
+Interface: 10.10.10.1 --- 0x2
+  Internet Address      Physical Address      Type
+  10.10.10.40           [REDACTED]            dynamic
+  10.10.10.255          ff-ff-ff-ff-ff-ff     static
+
+Observation:
+
+Windows dynamically resolved:
+
+10.10.10.40 -> [REDACTED]
+
+The MAC address matched the ens33 MAC address observed on UBUNTU01.
+
+This confirmed successful ARP resolution between the Windows host
+and UBUNTU01 on VMnet2.
+
+NOTE:
+
+The complete ARP table also contained entries for other Windows
+network interfaces. Only the VMnet2 section is reproduced here
+because it is directly relevant to this stage.
+
+
+======================================================================
+5. INITIAL UBUNTU-TO-WINDOWS ICMP FAILURE
+======================================================================
+
+During Ubuntu-side testing, UBUNTU01 attempted to ping the Windows
+VMnet2 adapter:
+
+Source:      10.10.10.40
+Destination: 10.10.10.1
+
+The initial test resulted in:
+
+4 packets transmitted, 0 received, 100% packet loss.
+
+Additional Ubuntu-side testing demonstrated that:
+
+- UBUNTU01 had the correct static IPv4 address: 10.10.10.40/24.
+- A directly connected route existed for 10.10.10.0/24.
+- Ubuntu selected ens33 when routing traffic to 10.10.10.1.
+- Ubuntu successfully resolved 10.10.10.1 to MAC address
+  [REDACTED].
+- The learned MAC address matched the Windows VMnet2 adapter.
+- Windows successfully pinged UBUNTU01 at 10.10.10.40.
+
+These results indicated that VMnet2 connectivity, IPv4 addressing,
+routing, and Layer 2 neighbor resolution were functioning.
+
+The investigation therefore proceeded to Windows host-side
+configuration and firewall behavior.
+
+Detailed Ubuntu-side evidence is preserved in:
+
+008-UBUNTU01-VMnet2-Static-IP-and-Connectivity.txt
+
+
+======================================================================
+6. WINDOWS NETWORK PROFILE CHECK
+======================================================================
+
+Command:
+
+Get-NetConnectionProfile -InterfaceAlias "VMware Network Adapter VMnet2"
+
+Output:
+
+Get-NetConnectionProfile : No MSFT_NetConnectionProfile objects found
+with property 'InterfaceAlias' equal to 'VMware Network Adapter VMnet2'.
+Verify the value of the property and retry.
+
+CategoryInfo:
+ObjectNotFound
+
+FullyQualifiedErrorId:
+CmdletizationQuery_NotFound_InterfaceAlias,Get-NetConnectionProfile
+
+Observation:
+
+Windows did not return an MSFT_NetConnectionProfile object for the
+VMware VMnet2 host-only adapter using this command.
+
+This result did not indicate that the VMnet2 adapter itself was down.
+
+Separate adapter verification had already confirmed that:
+
+- The VMnet2 adapter status was Up.
+- The adapter had IPv4 address 10.10.10.1/24.
+- Windows could communicate with UBUNTU01 at 10.10.10.40.
+
+Because a connection profile could not be retrieved for VMnet2 using
+this command, firewall behavior was investigated directly rather
+than assuming a specific Windows network profile.
+
+
+======================================================================
+7. INSPECT BUILT-IN WINDOWS FIREWALL ICMP RULES
+======================================================================
+
+Command:
+
+Get-NetFirewallRule -DisplayGroup "File and Printer Sharing" |
+Where-Object {$_.DisplayName -like "*Echo Request*"} |
+Select-Object DisplayName,Enabled,Profile,Direction,Action
+
+Relevant Results:
+
+Domain Profile:
+
+File and Printer Sharing (Echo Request - ICMPv4-In)
+Enabled   : False
+Profile   : Domain
+Direction : Inbound
+Action    : Allow
+
+Private Profile:
+
+File and Printer Sharing (Echo Request - ICMPv4-In)
+Enabled   : False
+Profile   : Private
+Direction : Inbound
+Action    : Allow
+
+Public Profile:
+
+File and Printer Sharing (Echo Request - ICMPv4-In)
+Enabled   : False
+Profile   : Public
+Direction : Inbound
+Action    : Allow
+
+Observation:
+
+The built-in File and Printer Sharing inbound ICMPv4 Echo Request
+rules were disabled for the Domain, Private, and Public profiles.
+
+The rules had an Allow action but were not enabled.
+
+This was consistent with the observed asymmetric ICMP behavior:
+
+Windows -> UBUNTU01 = SUCCESS
+UBUNTU01 -> Windows = FAILED
+
+Rather than disabling Windows Firewall or broadly enabling File and
+Printer Sharing rules, a dedicated rule was created specifically for
+the cybersecurity lab subnet.
+
+
+======================================================================
+8. CREATE SCOPED WINDOWS FIREWALL RULE
+======================================================================
+
+Command:
+
+New-NetFirewallRule `
+  -DisplayName "Cyber Lab - Allow ICMPv4 from VMnet2" `
+  -Direction Inbound `
+  -Protocol ICMPv4 `
+  -IcmpType 8 `
+  -RemoteAddress 10.10.10.0/24 `
+  -Action Allow
+
+Output:
+
+Name                          : {bd9dca9a-4b5e-4561-b60a-333482b4486a}
+DisplayName                   : Cyber Lab - Allow ICMPv4 from VMnet2
+Description                   :
+DisplayGroup                  :
+Group                         :
+Enabled                       : True
+Profile                       : Any
+Platform                      : {}
+Direction                     : Inbound
+Action                        : Allow
+EdgeTraversalPolicy           : Block
+LooseSourceMapping            : False
+LocalOnlyMapping              : False
+Owner                         :
+PrimaryStatus                 : OK
+Status                        : The rule was parsed successfully from
+                                the store. (65536)
+EnforcementStatus             : NotApplicable
+PolicyStoreSource             : PersistentStore
+PolicyStoreSourceType         : Local
+RemoteDynamicKeywordAddresses :
+PolicyAppId                   :
+
+Result:
+
+PASS - The firewall rule was successfully created.
+
+Configuration:
+
+Display Name:   Cyber Lab - Allow ICMPv4 from VMnet2
+Direction:      Inbound
+Protocol:       ICMPv4
+ICMP Type:      8 (Echo Request)
+Remote Network: 10.10.10.0/24
+Action:         Allow
+Enabled:        True
+
+Observation:
+
+A dedicated inbound firewall rule was created to permit ICMPv4 Echo
+Requests originating from the VMnet2 cybersecurity lab subnet.
+
+The rule creation output confirmed that the rule was:
+
+- Enabled
+- Inbound
+- Configured with an Allow action
+- Successfully parsed into the Windows Firewall policy store
+
+The command used to create the rule restricted the permitted remote
+addresses to:
+
+10.10.10.0/24
+
+and specified:
+
+ICMPv4 Type 8 - Echo Request
+
+Security Decision:
+
+Windows Firewall was NOT disabled.
+
+The broad built-in File and Printer Sharing rules were also left
+disabled.
+
+Instead, a dedicated rule was created for the lab requirement and
+restricted to the 10.10.10.0/24 source network.
+
+This reduced unnecessary exposure while permitting the specific
+traffic required for VMnet2 connectivity testing.
+
+
+======================================================================
+9. VERIFY FIREWALL RULE SCOPE
+======================================================================
+
+Purpose:
+
+Verify that the custom Windows Firewall rule was stored with the
+intended remote-address restriction, protocol, and ICMP message type.
+
+
+----------------------------------------------------------------------
+9.1 VERIFY REMOTE ADDRESS SCOPE
+----------------------------------------------------------------------
+
+Command:
+
+Get-NetFirewallRule -DisplayName "Cyber Lab - Allow ICMPv4 from VMnet2" |
+Get-NetFirewallAddressFilter |
+Select-Object RemoteAddress
+
+Output:
+
+RemoteAddress
+-------------
+10.10.10.0/255.255.255.0
+
+Observation:
+
+Windows confirmed that the firewall rule was restricted to:
+
+10.10.10.0/255.255.255.0
+
+This is equivalent to:
+
+10.10.10.0/24
+
+Therefore, the rule does not permit matching ICMPv4 Echo Requests
+from all remote IPv4 addresses. The permitted source network is
+restricted to the dedicated VMnet2 cybersecurity lab subnet.
+
+
+----------------------------------------------------------------------
+9.2 VERIFY PROTOCOL AND ICMP TYPE
+----------------------------------------------------------------------
+
+Command:
+
+Get-NetFirewallRule -DisplayName "Cyber Lab - Allow ICMPv4 from VMnet2" |
+Get-NetFirewallPortFilter |
+Select-Object Protocol,IcmpType
+
+Output:
+
+Protocol IcmpType
+-------- --------
+ICMPv4   8
+
+Observation:
+
+Windows confirmed that the rule applies to:
+
+Protocol:  ICMPv4
+ICMP Type: 8
+
+ICMPv4 Type 8 represents an Echo Request, which is the request sent
+when another IPv4 host attempts to ping the Windows system.
+
+The rule therefore permits inbound ICMPv4 Echo Requests from the
+10.10.10.0/24 VMnet2 lab subnet.
+
+
+----------------------------------------------------------------------
+9.3 FIREWALL SCOPE VERIFICATION SUMMARY
+----------------------------------------------------------------------
+
+Rule Name:
+Cyber Lab - Allow ICMPv4 from VMnet2
+
+Direction:
+Inbound
+
+Action:
+Allow
+
+Protocol:
+ICMPv4
+
+ICMP Type:
+8 - Echo Request
+
+Remote Address:
+10.10.10.0/24
+
+Rule Enabled:
+Yes
+
+Windows Firewall:
+Remained enabled
+
+Built-in File and Printer Sharing Echo Request Rules:
+Remained disabled
+
+Result:
+
+PASS
+
+Security Observation:
+
+The stored Windows Firewall configuration confirms that the rule
+was narrowly scoped to the traffic required for the lab.
+
+Instead of disabling Windows Firewall or broadly enabling the
+built-in File and Printer Sharing rules, a dedicated rule permits
+only ICMPv4 Echo Requests originating from the 10.10.10.0/24 lab
+network.
+
+
+======================================================================
+10. UBUNTU-TO-WINDOWS CONNECTIVITY RETEST
+======================================================================
+
+After creating the scoped Windows Firewall rule, the ping test was
+repeated from UBUNTU01.
+
+Ubuntu command:
+
+ping -c 4 10.10.10.1
+
+Result:
+
+PASS - 4 packets transmitted, 4 received, 0% packet loss.
+
+Observation:
+
+UBUNTU01 successfully received ICMP Echo Replies from the Windows
+VMnet2 adapter after the firewall configuration change.
+
+This confirmed that the original failed ping was associated with
+Windows inbound ICMP filtering rather than a failure of VMnet2,
+IPv4 addressing, routing, or ARP resolution.
+
+The complete successful Ubuntu ping output is preserved in:
+
+008-UBUNTU01-VMnet2-Static-IP-and-Connectivity.txt
+
+
+======================================================================
+11. ROOT CAUSE AND RESOLUTION
+======================================================================
+
+Problem:
+
+UBUNTU01 could not initially ping the Windows VMnet2 adapter at
+10.10.10.1 even though both systems were configured on the
+10.10.10.0/24 subnet.
+
+Evidence:
+
+- Windows VMnet2 address was correctly configured as 10.10.10.1/24.
+- UBUNTU01 was correctly configured as 10.10.10.40/24.
+- Both systems successfully resolved each other's MAC addresses.
+- Windows successfully pinged UBUNTU01.
+- Ubuntu correctly selected its directly connected route for
+  10.10.10.1.
+- Windows built-in inbound ICMPv4 Echo Request rules were disabled.
+
+Root Cause:
+
+Inbound ICMPv4 Echo Requests to the Windows host were not permitted
+by the applicable Windows Firewall configuration.
+
+Resolution:
+
+Created the following dedicated lab firewall rule:
+
+Cyber Lab - Allow ICMPv4 from VMnet2
+
+The rule permits inbound ICMPv4 Echo Requests from:
+
+10.10.10.0/24
+
+Validation:
+
+After applying the rule, UBUNTU01 successfully pinged the Windows
+VMnet2 adapter with 0% packet loss.
+
+
+======================================================================
+12. SECURITY AND TROUBLESHOOTING LESSONS
+======================================================================
+
+1. A failed ping does not by itself prove that a network path is
+   unavailable.
+
+2. IP addressing, routing, ARP resolution, and host firewall behavior
+   should be investigated separately.
+
+3. Bidirectional ARP resolution demonstrated that Layer 2
+   communication was functioning even while one direction of ICMP
+   testing failed.
+
+4. Reverse-direction testing helped isolate the problem.
+
+5. Host-based firewalls can produce asymmetric connectivity behavior.
+
+6. Windows Firewall did not need to be disabled to solve the problem.
+
+7. A least-privilege firewall rule was preferable to broadly enabling
+   ICMP access.
+
+8. Restricting the rule to 10.10.10.0/24 limited the permitted
+   traffic to the dedicated cybersecurity lab network.
+
+
+======================================================================
+13. FINAL STATE
+======================================================================
+
+VMnet2 Network:             10.10.10.0/24
+Windows VMnet2 Address:     10.10.10.1/24
+UBUNTU01 Address:           10.10.10.40/24
+
+Windows VMnet2 Adapter:     UP
+Windows -> Ubuntu ICMP:     PASS
+Ubuntu -> Windows ICMP:     PASS
+Windows ARP Resolution:     PASS
+Ubuntu Neighbor Resolution: PASS
+
+Windows Firewall:           ENABLED
+Lab ICMP Rule:              ENABLED
+Rule Direction:             INBOUND
+Rule Source Network:        10.10.10.0/24
+Rule Action:                ALLOW
+
+
+======================================================================
+14. STAGE RESULT
+======================================================================
+
+STATUS: PASS
+
+The Windows host-side VMnet2 configuration was successfully verified.
+
+Layer 2 and Layer 3 communication between the Windows host
+(10.10.10.1) and UBUNTU01 (10.10.10.40) was confirmed.
+
+An initial asymmetric ICMP connectivity issue was investigated using
+IP configuration, routing, ARP/neighbor resolution, reverse-direction
+testing, and Windows Firewall inspection.
+
+The issue was resolved without disabling Windows Firewall by creating
+a narrowly scoped inbound ICMPv4 rule for the dedicated
+10.10.10.0/24 lab subnet.
+
+Bidirectional ICMP communication was successfully verified following
+the configuration change.
+======================================================================

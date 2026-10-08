@@ -1,0 +1,882 @@
+======================================================================
+PROJECT: VIRTUAL NETWORK ARCHITECTURE & SECURITY LAB
+EVIDENCE FILE: 008-UBUNTU01-VMnet2-Static-IP-and-Connectivity.txt
+======================================================================
+
+STAGE:
+3C - VMnet2 Static Host-Only Networking
+
+SYSTEM:
+UBUNTU01
+
+HOSTNAME:
+emrok-ubuntu01
+
+NETWORK INTERFACE:
+ens33
+
+NETWORK:
+VMnet2 - LAB-LAN
+
+NETWORK ADDRESS:
+10.10.10.0/24
+
+WINDOWS HOST VMNET2 ADDRESS:
+10.10.10.1/24
+
+UBUNTU01 STATIC ADDRESS:
+10.10.10.40/24
+
+DEFAULT GATEWAY:
+None intentionally configured
+
+DNS:
+None intentionally configured
+
+VMWARE DHCP:
+Disabled on VMnet2
+
+VMWARE NAT:
+Not enabled on VMnet2
+
+
+======================================================================
+OBJECTIVE
+======================================================================
+
+The objective of this stage was to manually configure UBUNTU01 with
+a static IPv4 address after moving the virtual machine from VMware
+VMnet8 NAT to the isolated VMnet2 host-only network.
+
+VMnet2 was intentionally configured without VMware DHCP and NAT.
+
+The experiment was designed to demonstrate that:
+
+1. A host can be manually assigned an IPv4 address without DHCP.
+2. Hosts on the same IPv4 subnet can communicate directly without
+   a default gateway.
+3. A default gateway is required to reach networks outside the
+   directly connected subnet.
+4. DNS is not required when communicating directly by IP address.
+5. Host firewall rules can affect connectivity even when addressing,
+   routing, and Layer 2 communication are functioning correctly.
+
+
+======================================================================
+PRE-CONFIGURATION CONDITION
+======================================================================
+
+After UBUNTU01 was moved from VMnet8 NAT to VMnet2, NetworkManager
+attempted to obtain an IPv4 configuration automatically.
+
+Because DHCP was intentionally disabled on VMnet2, UBUNTU01 did not
+receive an IPv4 address.
+
+The detailed unconfigured state was captured separately in:
+
+007-UBUNTU01-VMnet2-Unconfigured-State.txt
+
+NetworkManager identified the Ethernet connection profile as:
+
+Wired connection 1
+
+
+======================================================================
+1. NETWORKMANAGER CONNECTION PROFILE
+======================================================================
+
+Command:
+
+nmcli connection show
+
+Output:
+
+NAME                UUID                                  TYPE      DEVICE
+Wired connection 1  [REDACTED]				  ethernet  ens33
+
+Observation:
+
+NetworkManager was managing ens33 through the connection profile
+"Wired connection 1".
+
+This profile was selected for manual IPv4 configuration.
+
+
+======================================================================
+2. STATIC IPV4 CONFIGURATION
+======================================================================
+
+Command:
+
+sudo nmcli connection modify "Wired connection 1" \
+ipv4.method manual \
+ipv4.addresses 10.10.10.40/24 \
+ipv4.gateway "" \
+ipv4.dns ""
+
+Result:
+
+The command completed without an error.
+
+Configuration applied:
+
+IPv4 method:     Manual
+IPv4 address:    10.10.10.40/24
+Default gateway: None
+DNS servers:     None
+
+Observation:
+
+A default gateway and DNS server were intentionally omitted so that
+local-subnet connectivity could be tested independently from routing
+and name resolution.
+
+
+======================================================================
+3. REACTIVATE NETWORK CONNECTION
+======================================================================
+
+Command:
+
+sudo nmcli connection down "Wired connection 1"
+
+Output:
+
+Connection 'Wired connection 1' successfully deactivated
+(D-Bus active path:
+/org/freedesktop/NetworkManager/ActiveConnection/13)
+
+
+Command:
+
+sudo nmcli connection up "Wired connection 1"
+
+Output:
+
+Connection successfully activated
+(D-Bus active path:
+/org/freedesktop/NetworkManager/ActiveConnection/14)
+
+Observation:
+
+The connection activated successfully after changing from automatic
+DHCP configuration to manual IPv4 addressing.
+
+
+======================================================================
+4. VERIFY STATIC IPV4 ADDRESS
+======================================================================
+
+Command:
+
+ip addr show ens33
+
+Output:
+
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel
+state UP group default qlen 1000
+    link/ether [REDACTED]
+    altname enp2s1
+    inet 10.10.10.40/24 brd 10.10.10.255 scope global noprefixroute ens33
+       valid_lft forever preferred_lft forever
+    inet6 fe80::3918:1bef:4625:7d31/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+
+Observation:
+
+ens33 was UP and LOWER_UP, confirming that the virtual network
+interface and virtual link were operational.
+
+The interface successfully received the manually configured static
+IPv4 address:
+
+10.10.10.40/24
+
+The "valid_lft forever" value was consistent with a manually
+configured static address rather than a DHCP lease.
+
+
+======================================================================
+5. VERIFY ROUTING TABLE
+======================================================================
+
+Command:
+
+ip route
+
+Output:
+
+10.10.10.0/24 dev ens33 proto kernel scope link src 10.10.10.40 metric 100
+169.254.0.0/16 dev ens33 scope link metric 1000
+
+Observation:
+
+Ubuntu automatically created a directly connected route for:
+
+10.10.10.0/24
+
+The route identifies ens33 as the interface and 10.10.10.40 as the
+source IPv4 address.
+
+There is intentionally NO default route.
+
+This means UBUNTU01 knows how to communicate with systems located on
+10.10.10.0/24 but does not have a route for external IPv4 networks.
+
+
+======================================================================
+6. VERIFY NETWORKMANAGER STATUS
+======================================================================
+
+Command:
+
+nmcli device status
+
+Output:
+
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  Wired connection 1
+lo      loopback  unmanaged  --
+
+Observation:
+
+NetworkManager now reported ens33 as "connected".
+
+This differs from the pre-configuration state, where the interface
+remained in:
+
+connecting (getting IP configuration)
+
+The static configuration therefore resolved the DHCP-related
+connection activation problem.
+
+
+======================================================================
+7. INITIAL WINDOWS HOST CONNECTIVITY TEST
+======================================================================
+
+Command:
+
+ping -c 4 10.10.10.1
+
+Output:
+
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 0 received, 100% packet loss, time 3087ms
+
+Result:
+
+FAILED - 100% packet loss.
+
+Observation:
+
+UBUNTU01 had a valid IPv4 address and directly connected route for
+10.10.10.0/24, but it did not receive ICMP Echo Replies from the
+Windows VMnet2 adapter at 10.10.10.1.
+
+The failed ping was not treated as proof that VMnet2 itself was
+broken.
+
+Additional routing, ARP/neighbor, and reverse-connectivity testing
+was performed to identify where communication was failing.
+
+
+======================================================================
+8. VERIFY ROUTE TO WINDOWS HOST
+======================================================================
+
+Command:
+
+ip route get 10.10.10.1
+
+Output:
+
+10.10.10.1 dev ens33 src 10.10.10.40 uid 1000
+    cache
+
+Observation:
+
+Ubuntu correctly identified 10.10.10.1 as reachable directly through
+ens33 using source address 10.10.10.40.
+
+There is no "via" gateway in the result.
+
+This confirmed that Ubuntu was correctly treating 10.10.10.1 as a
+host on its directly connected subnet.
+
+A router/default gateway was therefore not required for communication
+between 10.10.10.40 and 10.10.10.1.
+
+
+======================================================================
+9. VERIFY ARP / NEIGHBOR RESOLUTION
+======================================================================
+
+Command:
+
+ip neigh show 10.10.10.1
+
+Initial Output:
+
+10.10.10.1 dev ens33 lladdr [REDACTED] STALE
+
+A further ping was performed:
+
+ping -c 1 10.10.10.1
+
+Output:
+
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+
+--- 10.10.10.1 ping statistics ---
+1 packets transmitted, 0 received, 100% packet loss, time 0ms
+
+
+Neighbor table checked again:
+
+ip neigh show 10.10.10.1
+
+Output:
+
+10.10.10.1 dev ens33 lladdr [REDACTED] REACHABLE
+
+Observation:
+
+Ubuntu successfully resolved 10.10.10.1 to MAC address:
+
+[REDACTED]
+
+The neighbor state eventually showed REACHABLE.
+
+The Windows host independently confirmed that this MAC address
+belonged to its VMware VMnet2 virtual adapter.
+
+This demonstrated that Layer 2 communication and ARP resolution
+between UBUNTU01 and the Windows VMnet2 adapter were functioning.
+
+The failed ping therefore was not caused by an inability to locate
+the Windows host at Layer 2.
+
+
+======================================================================
+10. REVERSE CONNECTIVITY TEST
+======================================================================
+
+A reverse connectivity test was performed from the Windows host.
+
+Windows command:
+
+ping 10.10.10.40
+
+Result:
+
+SUCCESS - 4 packets sent, 4 received, 0% packet loss.
+
+Windows also learned the following ARP mapping:
+
+10.10.10.40 -> [REDACTED]
+
+The MAC address matched the ens33 MAC address on UBUNTU01.
+
+Observation:
+
+Windows successfully communicating with 10.10.10.40 demonstrated
+that:
+
+- VMnet2 was functioning.
+- UBUNTU01's static IPv4 configuration was functioning.
+- Windows and Ubuntu could communicate over the host-only network.
+- Layer 2 communication worked in both directions.
+- The remaining failure was specific to inbound ICMP Echo Requests
+  directed at Windows.
+
+Detailed Windows-side evidence is stored separately in:
+
+009-Windows-VMnet2-Connectivity-and-Firewall.txt
+
+
+======================================================================
+11. WINDOWS FIREWALL INVESTIGATION
+======================================================================
+
+Windows Firewall was investigated rather than disabled.
+
+The built-in File and Printer Sharing ICMPv4 inbound Echo Request
+rules were found to be disabled.
+
+This explained why:
+
+Windows -> UBUNTU01 ping succeeded
+
+while:
+
+UBUNTU01 -> Windows ping failed
+
+A narrowly scoped Windows Firewall rule was created to permit inbound
+ICMPv4 Echo Requests originating from the VMnet2 lab subnet:
+
+10.10.10.0/24
+
+Firewall rule name:
+
+Cyber Lab - Allow ICMPv4 from VMnet2
+
+Security decision:
+
+Windows Firewall was NOT disabled.
+
+Instead, only the traffic required for the lab was permitted from the
+specific 10.10.10.0/24 lab subnet.
+
+
+======================================================================
+12. WINDOWS HOST CONNECTIVITY RETEST
+======================================================================
+
+After the scoped Windows Firewall rule was created, the connectivity
+test was repeated from UBUNTU01.
+
+Command:
+
+ping -c 4 10.10.10.1
+
+Output:
+
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+64 bytes from 10.10.10.1: icmp_seq=1 ttl=128 time=1.11 ms
+64 bytes from 10.10.10.1: icmp_seq=2 ttl=128 time=0.359 ms
+64 bytes from 10.10.10.1: icmp_seq=3 ttl=128 time=0.475 ms
+64 bytes from 10.10.10.1: icmp_seq=4 ttl=128 time=0.428 ms
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3082ms
+rtt min/avg/max/mdev = 0.359/0.593/1.110/0.301 ms
+
+Result:
+
+SUCCESS - 0% packet loss.
+
+Observation:
+
+UBUNTU01 successfully received ICMP Echo Replies from the Windows
+VMnet2 adapter after the scoped firewall rule was applied.
+
+This confirmed bidirectional IPv4 connectivity between:
+
+Windows Host: 10.10.10.1/24
+UBUNTU01:     10.10.10.40/24
+
+Both systems were able to communicate directly because they were
+members of the same 10.10.10.0/24 subnet.
+
+No default gateway was required for this communication.
+
+
+======================================================================
+13. EXTERNAL IPV4 CONNECTIVITY TEST
+======================================================================
+
+Command:
+
+ping -c 4 8.8.8.8
+
+Output:
+
+ping: connect: Network is unreachable
+
+Result:
+
+FAILED AS EXPECTED.
+
+Observation:
+
+This was an intentional and expected failure.
+
+The routing table contained a route for:
+
+10.10.10.0/24
+
+but contained no default route.
+
+8.8.8.8 is outside the directly connected 10.10.10.0/24 subnet.
+
+Because UBUNTU01 had no default gateway, Linux had no route indicating
+where packets destined for 8.8.8.8 should be sent.
+
+This demonstrated the difference between:
+
+Local-subnet communication:
+10.10.10.40 -> 10.10.10.1 = SUCCESS
+
+Remote-network communication:
+10.10.10.40 -> 8.8.8.8 = NETWORK UNREACHABLE
+
+======================================================================
+14. FINAL VERIFICATION
+======================================================================
+
+Purpose:
+
+Perform a final verification of UBUNTU01 after static IPv4
+configuration and Windows Firewall troubleshooting.
+
+This verification confirms the final operational state of the
+VMnet2 host-only connection.
+
+
+----------------------------------------------------------------------
+14.1 VERIFY HOSTNAME
+----------------------------------------------------------------------
+
+Command:
+
+hostname
+
+Output:
+
+emrok-ubuntu01
+
+Observation:
+
+The system hostname was confirmed as emrok-ubuntu01.
+
+
+----------------------------------------------------------------------
+14.2 VERIFY INTERFACE AND STATIC IPV4 ADDRESS
+----------------------------------------------------------------------
+
+Command:
+
+ip addr show ens33
+
+Output:
+
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel
+state UP group default qlen 1000
+    link/ether [REDACTED] brd ff:ff:ff:ff:ff:ff
+    altname enp2s1
+    inet 10.10.10.40/24 brd 10.10.10.255 scope global noprefixroute ens33
+       valid_lft forever preferred_lft forever
+    inet6 fe80::3918:1bef:4625:7d31/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+
+Observation:
+
+The ens33 interface was UP and LOWER_UP, confirming that the virtual
+network interface and virtual link were operational.
+
+UBUNTU01 had the manually configured static IPv4 address:
+
+10.10.10.40/24
+
+The "valid_lft forever" and "preferred_lft forever" values are
+consistent with the manually configured address remaining valid
+without a DHCP lease expiration.
+
+
+----------------------------------------------------------------------
+14.3 VERIFY ROUTING TABLE
+----------------------------------------------------------------------
+
+Command:
+
+ip route
+
+Output:
+
+10.10.10.0/24 dev ens33 proto kernel scope link src 10.10.10.40 metric 100
+169.254.0.0/16 dev ens33 scope link metric 1000
+
+Observation:
+
+The routing table contained a directly connected route for the
+10.10.10.0/24 network through ens33.
+
+The source IPv4 address for this network was 10.10.10.40.
+
+No default IPv4 route was present.
+
+This means UBUNTU01 knew how to reach hosts on its directly connected
+10.10.10.0/24 network but had no route for destinations on external
+IPv4 networks.
+
+
+----------------------------------------------------------------------
+14.4 VERIFY NETWORKMANAGER STATUS
+----------------------------------------------------------------------
+
+Command:
+
+nmcli device status
+
+Output:
+
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  Wired connection 1
+lo      loopback  unmanaged  --
+
+Observation:
+
+NetworkManager reported ens33 as connected through the
+"Wired connection 1" profile.
+
+This confirmed that the manually configured connection was active
+and operational.
+
+
+----------------------------------------------------------------------
+14.5 VERIFY ROUTE TO WINDOWS HOST
+----------------------------------------------------------------------
+
+Command:
+
+ip route get 10.10.10.1
+
+Output:
+
+10.10.10.1 dev ens33 src 10.10.10.40 uid 1000
+    cache
+
+Observation:
+
+Ubuntu identified 10.10.10.1 as directly reachable through ens33
+using source address 10.10.10.40.
+
+No "via" gateway appeared in the route.
+
+This confirmed that communication between UBUNTU01 and the Windows
+VMnet2 adapter did not require a router because both systems were
+members of the directly connected 10.10.10.0/24 subnet.
+
+
+----------------------------------------------------------------------
+14.6 VERIFY NEIGHBOR / ARP RESOLUTION
+----------------------------------------------------------------------
+
+Command:
+
+ip neigh show 10.10.10.1
+
+Output:
+
+10.10.10.1 dev ens33 lladdr [REDACTED] STALE
+
+Observation:
+
+Ubuntu successfully associated IPv4 address 10.10.10.1 with the
+Layer 2 MAC address:
+
+[REDACTED]
+
+This MAC address matched the Windows VMware VMnet2 virtual adapter
+identified during Windows-side verification.
+
+The STALE neighbor state does not indicate a connectivity failure.
+It means the neighbor entry was known but had not been recently
+confirmed at the moment the command was executed. Linux can
+revalidate the entry when communication occurs.
+
+
+----------------------------------------------------------------------
+14.7 VERIFY LOCAL-SUBNET CONNECTIVITY
+----------------------------------------------------------------------
+
+Command:
+
+ping -c 4 10.10.10.1
+
+Output:
+
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+64 bytes from 10.10.10.1: icmp_seq=1 ttl=128 time=0.379 ms
+64 bytes from 10.10.10.1: icmp_seq=2 ttl=128 time=0.489 ms
+64 bytes from 10.10.10.1: icmp_seq=3 ttl=128 time=198 ms
+64 bytes from 10.10.10.1: icmp_seq=4 ttl=128 time=1.36 ms
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3065ms
+rtt min/avg/max/mdev = 0.379/50.040/197.937/85.389 ms
+
+Result:
+
+PASS - 4 packets transmitted, 4 received, 0% packet loss.
+
+Observation:
+
+UBUNTU01 successfully communicated with the Windows VMnet2 host
+adapter at 10.10.10.1.
+
+This confirmed successful bidirectional IPv4 communication between:
+
+UBUNTU01:     10.10.10.40/24
+Windows Host: 10.10.10.1/24
+
+The test succeeded after the Windows Firewall configuration was
+adjusted to permit inbound ICMPv4 Echo Requests from the dedicated
+10.10.10.0/24 lab subnet.
+
+The unusually high response time observed for the third packet did
+not cause packet loss and does not change the connectivity result.
+All four Echo Requests received replies.
+
+
+----------------------------------------------------------------------
+14.8 VERIFY EXTERNAL-NETWORK BEHAVIOR
+----------------------------------------------------------------------
+
+Command:
+
+ping -c 4 8.8.8.8
+
+Output:
+
+ping: connect: Network is unreachable
+
+Result:
+
+EXPECTED FAILURE
+
+Observation:
+
+UBUNTU01 could not attempt normal IPv4 communication with 8.8.8.8
+because no route existed for that destination.
+
+The routing table contained the directly connected:
+
+10.10.10.0/24
+
+network but did not contain a default route.
+
+Because 8.8.8.8 is outside the directly connected 10.10.10.0/24
+network and no default gateway was configured, Linux had no route
+through which to send the packet.
+
+This result was intentional and demonstrates the distinction between
+local-subnet communication and communication with remote networks.
+
+
+----------------------------------------------------------------------
+14.9 FINAL VERIFICATION SUMMARY
+----------------------------------------------------------------------
+
+Hostname:                    emrok-ubuntu01
+Interface:                   ens33
+Interface State:             UP / LOWER_UP
+IPv4 Address:                10.10.10.40/24
+IPv4 Configuration:          Manual / Static
+NetworkManager State:        Connected
+Directly Connected Network:  10.10.10.0/24
+Windows VMnet2 Host:         10.10.10.1/24
+Default IPv4 Gateway:        None
+External IPv4 Route:         None
+VMware DHCP on VMnet2:       Disabled
+VMware NAT on VMnet2:        Disabled
+
+Local-subnet connectivity:
+10.10.10.40 -> 10.10.10.1 = SUCCESS
+
+External-network connectivity:
+10.10.10.40 -> 8.8.8.8 = NETWORK UNREACHABLE AS EXPECTED
+
+FINAL VERIFICATION RESULT:
+
+PASS
+======================================================================
+
+======================================================================
+15. ROOT CAUSE AND RESOLUTION OF FAILED PING
+======================================================================
+
+Problem:
+
+After assigning UBUNTU01 the static address 10.10.10.40/24, an
+initial ping from Ubuntu to the Windows VMnet2 adapter at 10.10.10.1
+resulted in 100% packet loss.
+
+Troubleshooting:
+
+- Verified ens33 was UP.
+- Verified UBUNTU01 had 10.10.10.40/24.
+- Verified the 10.10.10.0/24 directly connected route.
+- Verified the route selected for 10.10.10.1.
+- Verified ARP/neighbor resolution for 10.10.10.1.
+- Confirmed the learned MAC address matched the Windows VMnet2
+  adapter.
+- Successfully pinged UBUNTU01 from Windows.
+- Inspected Windows Firewall ICMP rules.
+
+Root Cause:
+
+Windows was not permitting inbound ICMPv4 Echo Requests from the
+VMnet2 lab network.
+
+Resolution:
+
+A narrowly scoped Windows Firewall rule was created to permit
+inbound ICMPv4 Echo Requests from the 10.10.10.0/24 lab subnet.
+
+Windows Firewall was not disabled.
+
+Validation:
+
+The ping from UBUNTU01 to 10.10.10.1 was repeated and succeeded.
+
+
+======================================================================
+16. SECURITY AND TROUBLESHOOTING OBSERVATIONS
+======================================================================
+
+1. A failed ping does not automatically mean the network is down.
+
+2. Interface state, IP addressing, routing, ARP, firewall behavior,
+   and application/service availability should be investigated
+   separately.
+
+3. Successful ARP resolution can demonstrate local Layer 2
+   communication even when ICMP Echo Requests do not receive replies.
+
+4. Hosts on the same IPv4 subnet communicate directly and do not
+   require a default gateway.
+
+5. A default gateway is needed when traffic must reach a network that
+   is not directly connected.
+
+6. DNS is not required when communicating directly using IP
+   addresses.
+
+7. Host firewalls can produce asymmetric test results where one host
+   can ping another but the reverse ping fails.
+
+8. Security controls should not be broadly disabled during
+   troubleshooting when a narrower configuration change can solve
+   the problem.
+
+9. The Windows Firewall change followed a least-privilege approach by
+   permitting ICMPv4 Echo Requests only from the dedicated
+   10.10.10.0/24 lab subnet.
+
+
+======================================================================
+17. STAGE RESULT
+======================================================================
+
+STATUS: PASS
+
+UBUNTU01 was successfully migrated from DHCP-based VMware NAT
+networking to a manually configured static IPv4 address on the
+isolated VMnet2 host-only network.
+
+Bidirectional local-subnet communication between UBUNTU01
+(10.10.10.40) and the Windows host (10.10.10.1) was successfully
+verified.
+
+External IPv4 connectivity remained unavailable as expected because
+no default gateway or NAT path had been configured.
+
+Stage 3C successfully demonstrated static IPv4 addressing,
+directly connected routing, ARP/neighbor resolution, host firewall
+troubleshooting, least-privilege firewall configuration, and the
+difference between local-subnet and remote-network communication.
+======================================================================

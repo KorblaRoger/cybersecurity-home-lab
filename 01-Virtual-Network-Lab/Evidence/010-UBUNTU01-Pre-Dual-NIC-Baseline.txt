@@ -1,0 +1,72 @@
+Evidence 010 - UBUNTU01 Pre-Dual-NIC Baseline
+================================================
+
+Stage:
+3D - Dual-Homed Ubuntu Networking
+
+Purpose:
+Verify the known-good Stage 3C network state before adding a second
+virtual network adapter to UBUNTU01.
+
+Current Configuration:
+Hostname: emrok-ubuntu01
+Internal Interface: ens33
+Internal IPv4 Address: 10.10.10.40/24
+Internal Network: VMnet2 / 10.10.10.0/24
+Default IPv4 Route: None
+
+Validation Results:
+- ens33 is UP.
+- ens33 retains static address 10.10.10.40/24.
+- NetworkManager shows ens33 connected through Wired connection 1.
+- The routing table contains a directly connected route for 10.10.10.0/24.
+- No default IPv4 route is installed.
+- Windows VMnet2 host 10.10.10.1 is reachable.
+- Ping test to 10.10.10.1 completed with 0% packet loss.
+- Route lookup for 8.8.8.8 returned "Network is unreachable."
+
+Conclusion:
+The Stage 3C VMnet2 static baseline remains operational.
+
+UBUNTU01 can communicate with the directly connected 10.10.10.0/24
+network but has no route to external IPv4 networks.
+
+This state provides the pre-change baseline for adding a second
+VMware network interface connected to VMnet8.
+
+
+Raw Command Output
+==================
+emrok@emrok-ubuntu01:~$ hostname
+emrok-ubuntu01
+
+emrok@emrok-ubuntu01:~$ ip -br addr
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens33            UP             10.10.10.40/24 fe80::3918:1bef:4625:7d31/64 
+
+emrok@emrok-ubuntu01:~$ ip route
+10.10.10.0/24 dev ens33 proto kernel scope link src 10.10.10.40 metric 100 
+169.254.0.0/16 dev ens33 scope link metric 1000 
+
+emrok@emrok-ubuntu01:~$ nmcli device status
+DEVICE  TYPE      STATE      CONNECTION         
+ens33   ethernet  connected  Wired connection 1 
+lo      loopback  unmanaged  --                 
+
+emrok@emrok-ubuntu01:~$ nmcli connection show
+NAME                UUID                                  TYPE      DEVICE 
+Wired connection 1  [REDACTED]                            ethernet  ens33  
+
+emrok@emrok-ubuntu01:~$ ping -c 4 10.10.10.1
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+64 bytes from 10.10.10.1: icmp_seq=1 ttl=128 time=0.849 ms
+64 bytes from 10.10.10.1: icmp_seq=2 ttl=128 time=0.346 ms
+64 bytes from 10.10.10.1: icmp_seq=3 ttl=128 time=1.03 ms
+64 bytes from 10.10.10.1: icmp_seq=4 ttl=128 time=0.339 ms
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3055ms
+rtt min/avg/max/mdev = 0.339/0.640/1.029/0.304 ms
+
+emrok@emrok-ubuntu01:~$ ip route get 8.8.8.8
+RTNETLINK answers: Network is unreachable

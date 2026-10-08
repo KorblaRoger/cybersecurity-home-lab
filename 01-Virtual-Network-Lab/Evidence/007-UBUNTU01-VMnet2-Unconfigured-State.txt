@@ -1,0 +1,7 @@
+ens33 UP
+No IPv4
+No routes
+No DNS
+NetworkManager waiting for IP configuration
+10.10.10.1 → Network is unreachable
+8.8.8.8 → Network is unreachable

@@ -1,0 +1,702 @@
+================================================================================
+EVIDENCE 014 - DC01 ACTIVE DIRECTORY DOMAIN SERVICES PROMOTION AND DNS VALIDATION
+================================================================================
+
+Project:
+01 - Virtual Network Lab
+
+System:
+DC01
+
+Purpose:
+Document the successful promotion of DC01 to the first Domain Controller in the
+new Active Directory forest, validate Active Directory Domain Services (AD DS),
+DNS, SYSVOL, Netlogon, FSMO role placement, and confirm the final network state.
+
+================================================================================
+1. ACTIVE DIRECTORY DESIGN
+================================================================================
+
+Server Name:
+DC01
+
+Operating System:
+Windows Server 2025 Standard (Desktop Experience)
+
+Domain / DNS Root:
+ad.cyberlab.test
+
+NetBIOS Domain Name:
+AD
+
+Forest Functional Level:
+Windows Server 2025
+
+Domain Functional Level:
+Windows Server 2025
+
+Domain Controller Roles:
+- Active Directory Domain Services
+- DNS Server
+- Global Catalog
+
+Read-Only Domain Controller:
+No
+
+DNS Delegation:
+No delegation created.
+
+Reason:
+This is a standalone lab forest with no authoritative parent DNS zone requiring
+delegation.
+
+AD DS Database Path:
+C:\WINDOWS\NTDS
+
+AD DS Log Path:
+C:\WINDOWS\NTDS
+
+SYSVOL Path:
+C:\WINDOWS\SYSVOL
+
+================================================================================
+2. PRE-PROMOTION STATE
+================================================================================
+
+Before promotion, DC01 was configured as a standalone Windows Server system.
+
+Computer Name:
+DC01
+
+Domain:
+WORKGROUP
+
+Domain Role:
+StandaloneServer
+
+Network Interface:
+Ethernet0
+
+IPv4 Address:
+10.10.10.10/24
+
+Default Gateway:
+None
+
+IPv4 DNS Server:
+None
+
+Network:
+VMnet2 - LAB-LAN
+
+DC01 was intentionally configured as a single-homed server on the isolated
+10.10.10.0/24 laboratory network.
+
+================================================================================
+3. AD DS PROMOTION
+================================================================================
+
+Active Directory Domain Services was installed and DC01 was promoted as the
+first Domain Controller in a new forest.
+
+New Forest:
+ad.cyberlab.test
+
+NetBIOS Name:
+AD
+
+DNS Server:
+Enabled
+
+Global Catalog:
+Enabled
+
+Forest Functional Level:
+Windows Server 2025
+
+Domain Functional Level:
+Windows Server 2025
+
+The promotion prerequisite check completed successfully before installation.
+
+A DNS delegation warning was displayed because an authoritative parent DNS zone
+does not exist for this isolated lab namespace. No DNS delegation was created.
+
+DC01 automatically restarted following successful promotion.
+
+================================================================================
+4. POST-PROMOTION DOMAIN ROLE VALIDATION
+================================================================================
+
+Command:
+
+Get-ComputerInfo | Select-Object CsName, CsDomain, CsDomainRole
+
+Result:
+
+CsName CsDomain                    CsDomainRole
+------ --------                    ------------
+DC01   ad.cyberlab.test            PrimaryDomainController
+
+Validation:
+PASS
+
+DC01 retained its intended hostname, became a member of ad.cyberlab.test, and
+is recognized as the Primary Domain Controller for the newly created domain.
+
+================================================================================
+5. CORE AD DS AND DNS SERVICE VALIDATION
+================================================================================
+
+Command:
+
+Get-Service NTDS,DNS
+
+Result:
+
+Status   Name   DisplayName
+------   ----   -----------
+Running  DNS    DNS Server
+Running  NTDS   Active Directory Domain Services
+
+Validation:
+PASS
+
+Both Active Directory Domain Services and DNS Server services are running.
+
+================================================================================
+6. DNS CLIENT CONFIGURATION
+================================================================================
+
+Command:
+
+Get-DnsClientServerAddress -InterfaceAlias "Ethernet0"
+
+Result:
+
+InterfaceAlias   InterfaceIndex   AddressFamily   ServerAddresses
+--------------   --------------   -------------   ---------------
+Ethernet0        6                IPv4            {127.0.0.1}
+Ethernet0        6                IPv6            {::1}
+
+Validation:
+PASS
+
+Following promotion, DC01 is configured to use its locally hosted DNS service.
+
+IPv4 Loopback DNS:
+127.0.0.1
+
+IPv6 Loopback DNS:
+::1
+
+No public DNS server is configured directly on the domain controller network
+interface.
+
+================================================================================
+7. ACTIVE DIRECTORY DOMAIN DNS RESOLUTION
+================================================================================
+
+Command:
+
+Resolve-DnsName ad.cyberlab.test
+
+Result:
+
+Name                Type   TTL   Section   IPAddress
+----                ----   ---   -------   ---------
+ad.cyberlab.test    A      600   Answer    10.10.10.10
+
+Validation:
+PASS
+
+The Active Directory DNS namespace resolves to DC01's static IPv4 address.
+
+================================================================================
+8. ACTIVE DIRECTORY SERVICE DISCOVERY (SRV)
+================================================================================
+
+Command:
+
+Resolve-DnsName -Type SRV _ldap._tcp.dc._msdcs.ad.cyberlab.test
+
+Result:
+
+Name:
+_ldap._tcp.dc._msdcs.ad.cyberlab.test
+
+Record Type:
+SRV
+
+Target:
+dc01.ad.cyberlab.test
+
+Priority:
+0
+
+Weight:
+100
+
+Additional A Record:
+dc01.ad.cyberlab.test -> 10.10.10.10
+
+Validation:
+PASS
+
+The required LDAP Domain Controller locator record is registered in DNS and
+correctly identifies DC01 as an Active Directory Domain Controller.
+
+This record will allow future domain members to discover DC01 through DNS.
+
+================================================================================
+9. ACTIVE DIRECTORY DOMAIN CONFIGURATION
+================================================================================
+
+Command:
+
+Get-ADDomain | Select-Object DNSRoot,NetBIOSName,DomainMode,PDCEmulator,
+RIDMaster,InfrastructureMaster
+
+Result:
+
+DNSRoot              : ad.cyberlab.test
+NetBIOSName           : AD
+DomainMode            : Windows2025Domain
+PDCEmulator           : DC01.ad.cyberlab.test
+RIDMaster             : DC01.ad.cyberlab.test
+InfrastructureMaster : DC01.ad.cyberlab.test
+
+Validation:
+PASS
+
+DC01 holds all three domain-level FSMO roles:
+
+- PDC Emulator
+- RID Master
+- Infrastructure Master
+
+This is expected because DC01 is currently the first and only Domain Controller
+in the domain.
+
+================================================================================
+10. ACTIVE DIRECTORY FOREST CONFIGURATION
+================================================================================
+
+Command:
+
+Get-ADForest | Select-Object RootDomain,ForestMode,SchemaMaster,
+DomainNamingMaster,GlobalCatalogs
+
+Result:
+
+RootDomain         : ad.cyberlab.test
+ForestMode         : Windows2025Forest
+SchemaMaster       : DC01.ad.cyberlab.test
+DomainNamingMaster : DC01.ad.cyberlab.test
+GlobalCatalogs     : {DC01.ad.cyberlab.test}
+
+Validation:
+PASS
+
+DC01 holds both forest-level FSMO roles:
+
+- Schema Master
+- Domain Naming Master
+
+DC01 is also operating as a Global Catalog server.
+
+All five FSMO roles are therefore currently hosted by DC01, which is expected
+for the first Domain Controller in a new single-DC forest.
+
+================================================================================
+11. NETLOGON SERVICE VALIDATION
+================================================================================
+
+Command:
+
+Get-Service Netlogon
+
+Result:
+
+Status   Name       DisplayName
+------   ----       -----------
+Running  Netlogon   Netlogon
+
+Validation:
+PASS
+
+The Netlogon service is running.
+
+================================================================================
+12. DOMAIN CONTROLLER DIAGNOSTIC - DCDIAG
+================================================================================
+
+Command:
+
+dcdiag
+
+Major tests successfully passed:
+
+- Connectivity
+- Advertising
+- FrsEvent
+- SysVolCheck
+- KccEvent
+- KnowsOfRoleHolders
+- MachineAccount
+- NCSecDesc
+- NetLogons
+- ObjectsReplicated
+- Replications
+- RidManager
+- Services
+- VerifyReferences
+- LocatorCheck
+- Intersite
+- ForestDnsZones checks
+- DomainDnsZones checks
+- Schema checks
+- Configuration checks
+- Domain partition checks
+
+Two tests reported failures:
+
+1. DFSREvent
+2. SystemLog
+
+These results were investigated before determining the final health state.
+
+================================================================================
+13. DFS REPLICATION INVESTIGATION
+================================================================================
+
+DCDIAG reported:
+
+"There are warning or error events within the last 24 hours after the SYSVOL
+has been shared."
+
+Because DCDIAG evaluates recent DFS Replication events, the DFS Replication log
+was inspected directly.
+
+Command:
+
+Get-WinEvent -LogName "DFS Replication" -MaxEvents 10 |
+Select-Object TimeCreated, Id, LevelDisplayName, Message
+
+Relevant event sequence:
+
+21:37 - Event 1202 - Error
+The DFS Replication service failed to contact a Domain Controller during
+initial startup.
+
+21:42 - Event 6016 - Warning
+DFSR encountered a configuration update issue during initialization.
+
+21:42 - Event 4602 - Information
+The DFS Replication service successfully initialized SYSVOL.
+
+21:47 - Event 6018 - Information
+The DFS Replication service successfully updated its configuration.
+
+A follow-up query checked for Warning or Error events occurring after the
+successful Event 6018.
+
+Command:
+
+Get-WinEvent -LogName "DFS Replication" |
+Where-Object {
+    $_.TimeCreated -gt [datetime]"2026-09-20 21:47:06" -and
+    $_.LevelDisplayName -in "Warning","Error"
+} |
+Select-Object TimeCreated,Id,LevelDisplayName,Message
+
+Result:
+
+No matching events returned.
+
+Interpretation:
+
+The earlier DFS Replication error and warning occurred during the initial
+Domain Controller promotion/startup sequence.
+
+SYSVOL subsequently initialized successfully, DFSR successfully updated its
+configuration, and no new DFSR warnings or errors were recorded after the
+successful initialization point.
+
+================================================================================
+14. SYSVOL AND NETLOGON SHARE VALIDATION
+================================================================================
+
+Command:
+
+Get-SmbShare -Name SYSVOL,NETLOGON
+
+Result:
+
+Name      Path
+----      ----
+NETLOGON  C:\WINDOWS\SYSVOL\sysvol\ad.cyberlab.test\SCRIPTS
+SYSVOL    C:\WINDOWS\SYSVOL\sysvol
+
+Validation:
+PASS
+
+Both required Domain Controller shares are present.
+
+This result is consistent with:
+
+- SysVolCheck PASS
+- NetLogons PASS
+- Netlogon service Running
+- DFSR Event 4602 confirming successful SYSVOL initialization
+
+Conclusion:
+
+The DCDIAG DFSREvent failure represents recent historical initialization
+events rather than evidence of a current SYSVOL/DFSR failure.
+
+================================================================================
+15. SYSTEM LOG INVESTIGATION
+================================================================================
+
+DCDIAG reported SystemLog failure because warning/error events existed within
+the inspected event history.
+
+Observed events included:
+
+- WinRM initialization warnings
+- Temporary DNS resolution failures during Domain Controller startup
+- Kerberos authentication warnings while Netlogon was not yet started
+- Initial DNS dynamic registration failure
+- PDC Emulator time-source warning
+- Secure Boot update errors because Secure Boot is disabled
+- External Microsoft hostname resolution timeouts
+
+Several of these events occurred while AD DS, DNS, Netlogon, and related
+services were initializing immediately after promotion.
+
+External DNS resolution failures are also consistent with the current lab
+architecture because DC01 is intentionally isolated on VMnet2 and has no
+default gateway.
+
+A follow-up query checked for new System-level Error events after the server
+had stabilized.
+
+Command:
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'System'
+    Level     = 2
+    StartTime = [datetime]'2026-09-20 21:47:06'
+} |
+Select-Object TimeCreated,Id,ProviderName,Message
+
+Result:
+
+No matching events were found.
+
+Interpretation:
+
+No new System-level Error events were recorded after the identified
+stabilization point.
+
+The historical SystemLog events were retained rather than cleared so the
+original promotion/startup history remains available for troubleshooting and
+documentation.
+
+================================================================================
+16. DEDICATED ACTIVE DIRECTORY DNS DIAGNOSTIC
+================================================================================
+
+Command:
+
+dcdiag /test:dns
+
+Result:
+
+DC01 passed test Connectivity
+
+DC01 passed test DNS
+
+ad.cyberlab.test passed test DNS
+
+Validation:
+PASS
+
+The dedicated Domain Controller DNS diagnostic completed successfully for both
+DC01 and the ad.cyberlab.test domain.
+
+================================================================================
+17. FINAL NETWORK CONFIGURATION
+================================================================================
+
+Command:
+
+Get-NetIPConfiguration -InterfaceAlias "Ethernet0"
+
+Result:
+
+InterfaceAlias       : Ethernet0
+InterfaceIndex       : 6
+InterfaceDescription : Intel(R) 82574L Gigabit Network Connection
+NetProfile.Name      : ad.cyberlab.test
+IPv4Address          : 10.10.10.10
+IPv6DefaultGateway   :
+IPv4DefaultGateway   :
+DNSServer            : ::1
+                       127.0.0.1
+
+Validation:
+PASS
+
+Final network design:
+
+DC01
+ |
+ | Ethernet0
+ |
+ | 10.10.10.10/24
+ |
+ +---------------- VMnet2 / LAB-LAN ----------------+
+                   10.10.10.0/24
+
+Default Gateway:
+None
+
+DNS:
+Local DC01 DNS service
+
+The server remains intentionally single-homed on VMnet2.
+
+No VMnet8/NAT adapter is attached to DC01.
+
+================================================================================
+18. FINAL VALIDATION SUMMARY
+================================================================================
+
+Computer Name:
+DC01                                      PASS
+
+Active Directory Domain:
+ad.cyberlab.test                          PASS
+
+NetBIOS Domain:
+AD                                        PASS
+
+Domain Role:
+PrimaryDomainController                   PASS
+
+Domain Functional Level:
+Windows2025Domain                         PASS
+
+Forest Functional Level:
+Windows2025Forest                         PASS
+
+Active Directory Domain Services:
+Running                                   PASS
+
+DNS Server:
+Running                                   PASS
+
+Netlogon:
+Running                                   PASS
+
+Global Catalog:
+DC01                                      PASS
+
+FSMO Roles:
+All five hosted by DC01                   PASS
+
+Domain DNS A Record:
+ad.cyberlab.test -> 10.10.10.10           PASS
+
+LDAP Domain Controller SRV Record:
+dc01.ad.cyberlab.test                     PASS
+
+SYSVOL:
+Shared and initialized                    PASS
+
+NETLOGON:
+Shared                                    PASS
+
+DCDIAG DNS Test:
+Passed                                    PASS
+
+Post-stabilization DFSR Errors/Warnings:
+None observed                             PASS
+
+Post-stabilization System Errors:
+None observed                             PASS
+
+IPv4 Address:
+10.10.10.10                               PASS
+
+Default Gateway:
+None                                      EXPECTED
+
+DNS Client:
+Local DNS service                         PASS
+
+================================================================================
+19. SECURITY / ARCHITECTURE OBSERVATIONS
+================================================================================
+
+1. DC01 remains isolated from the external network.
+
+2. No default gateway is configured on the Domain Controller.
+
+3. DC01 is not dual-homed.
+
+4. Active Directory clients must use an AD-aware DNS server capable of
+   resolving the ad.cyberlab.test namespace.
+
+5. DC01 currently hosts both AD DS and DNS, so it uses its local DNS service.
+
+6. Public DNS servers were not configured directly on the DC network adapter.
+
+7. Historical DCDIAG event-log failures were investigated rather than hidden by
+   clearing event logs.
+
+8. SYSVOL and NETLOGON were independently validated after the DFSR startup
+   events.
+
+9. The forest-root PDC Emulator generated a time-source warning because there
+   is currently no higher domain time source. Time synchronization will be
+   addressed separately as part of later Domain Controller configuration.
+
+10. External Microsoft DNS lookups may fail while DC01 remains intentionally
+    isolated from VMnet8/Internet connectivity. This does not prevent the
+    internal Active Directory DNS namespace from operating.
+
+================================================================================
+20. FINAL STATUS
+================================================================================
+
+ACTIVE DIRECTORY DOMAIN SERVICES PROMOTION:
+PASS
+
+ACTIVE DIRECTORY DOMAIN:
+ad.cyberlab.test
+
+DOMAIN CONTROLLER:
+DC01.ad.cyberlab.test
+
+DOMAIN CONTROLLER IP:
+10.10.10.10
+
+ACTIVE DIRECTORY DNS:
+PASS
+
+SYSVOL / NETLOGON:
+PASS
+
+DOMAIN CONTROLLER HEALTH:
+PASS - No unresolved AD DS, DNS, SYSVOL, or DFSR issue identified during
+post-promotion validation.
+
+DC01 is ready to serve as the Domain Controller and DNS Server for the
+isolated cybersecurity laboratory domain.
+
+================================================================================
+END OF EVIDENCE 014
+================================================================================

@@ -1,0 +1,93 @@
+PROJECT 01 — VIRTUAL NETWORK LAB
+
+Evidence 004:
+VMnet2 Internal Lab Network Configuration
+
+
+OBJECTIVE
+
+Create a dedicated host-only virtual network for the
+cybersecurity lab.
+
+
+NETWORK DESIGN
+
+Network Name:
+VMnet2 / LAB-LAN
+
+Network Address:
+10.10.10.0/24
+
+Subnet Mask:
+255.255.255.0
+
+Host VMware Adapter:
+10.10.10.1
+
+VMware DHCP:
+Disabled
+
+Network Type:
+Host-only
+
+
+RATIONALE
+
+A host-only network was selected to provide an isolated
+environment where virtual machines can communicate with
+each other and the Windows host without being directly
+connected to the external physical network.
+
+VMware DHCP was disabled so IP configuration can initially
+be performed manually as part of the networking exercises.
+
+
+PLANNED ADDRESSING
+
+DC01       10.10.10.10
+WIN11-01   10.10.10.20
+KALI01     10.10.10.30
+UBUNTU01   10.10.10.40
+SPLUNK01   10.10.10.50
+Gateway    10.10.10.254 (reserved for future use)
+
+
+RESULTS
+PS C:\WINDOWS\system32> Get-NetIPAddress |
+>> Where-Object {$_.InterfaceAlias -eq "VMware Network Adapter VMnet2"} |
+>> Select-Object InterfaceAlias,IPAddress,PrefixLength
+
+InterfaceAlias                IPAddress                  PrefixLength
+--------------                ---------                  ------------
+VMware Network Adapter VMnet2 fe80::17d8:9932:953:513e%2           64
+VMware Network Adapter VMnet2 10.10.10.1                           24
+
+
+PS C:\WINDOWS\system32> Get-NetRoute |
+>> Where-Object {$_.InterfaceAlias -eq "VMware Network Adapter VMnet2"} |
+>> Select-Object InterfaceAlias,DestinationPrefix,NextHop
+
+InterfaceAlias                DestinationPrefix            NextHop
+--------------                -----------------            -------
+VMware Network Adapter VMnet2 255.255.255.255/32           0.0.0.0
+VMware Network Adapter VMnet2 224.0.0.0/4                  0.0.0.0
+VMware Network Adapter VMnet2 10.10.10.255/32              0.0.0.0
+VMware Network Adapter VMnet2 10.10.10.1/32                0.0.0.0
+VMware Network Adapter VMnet2 10.10.10.0/24                0.0.0.0
+VMware Network Adapter VMnet2 ff00::/8                     ::
+VMware Network Adapter VMnet2 fe80::17d8:9932:953:513e/128 ::
+VMware Network Adapter VMnet2 fe80::/64                    ::
+
+
+VERIFICATION RESULTS
+
+The VMware Network Adapter VMnet2 was successfully assigned
+10.10.10.1/24.
+
+The Windows routing table contains a directly connected route
+for 10.10.10.0/24 through VMnet2.
+
+VMware DHCP remains disabled and VMnet2 has no default gateway,
+as expected for the isolated LAB-LAN.
+
+Result: Configuration successful.

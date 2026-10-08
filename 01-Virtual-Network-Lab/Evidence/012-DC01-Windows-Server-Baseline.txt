@@ -1,0 +1,658 @@
+================================================================================
+CYBERSECURITY HOME LAB
+EVIDENCE 012 - DC01 WINDOWS SERVER BASELINE
+================================================================================
+
+Project:
+01 - Virtual Network Lab
+
+System:
+DC01
+
+Platform:
+Windows Server 2025 Standard (Desktop Experience)
+
+Purpose:
+Document the installation, initial configuration, network baseline, validation,
+and recovery point for DC01 before deployment of Active Directory Domain
+Services (AD DS) and DNS.
+
+================================================================================
+1. SYSTEM PURPOSE
+================================================================================
+
+DC01 was deployed as the Windows Server system that will later provide
+Active Directory Domain Services (AD DS) and DNS services for the
+Cybersecurity Lab.
+
+At the time this evidence was captured, DC01 remained a standalone Windows
+Server in WORKGROUP. AD DS and DNS roles had not yet been installed.
+
+The server was intentionally configured and validated in a baseline state
+before domain-controller promotion so that a known-good recovery point and
+before/after configuration record would be available.
+
+================================================================================
+2. VIRTUAL MACHINE CONFIGURATION
+================================================================================
+
+VM Name:
+DC01
+
+Guest Operating System:
+Windows Server 2025 Standard (Desktop Experience)
+
+VMware Compatibility Profile:
+Windows Server 2022
+
+Note:
+VMware Workstation Pro 17 did not provide a Windows Server 2025 guest profile
+during VM creation. The Windows Server 2022 profile was therefore selected as
+the VMware compatibility profile. The operating system actually installed
+inside the VM is Windows Server 2025 Standard (Desktop Experience).
+
+Virtual Hardware:
+- Memory: 4096 MB (4 GB)
+- Virtual CPUs: 2
+- Processor configuration: 1 processor x 2 cores
+- Virtual disk: 60 GB
+- Disk type: NVMe
+- Disk allocation: Dynamically allocated
+- Disk storage: Single virtual disk file
+- Firmware: UEFI
+- Secure Boot: Disabled
+- Network adapter: VMnet2 (Host-only / LAB-LAN)
+
+VM Storage Location:
+E:\Cybersecurity-Lab\Virtual-Machines\DC01
+
+Network:
+VMnet2
+
+VMnet2 LAB-LAN:
+10.10.10.0/24
+
+VMware host-side VMnet2 address:
+10.10.10.1
+
+VMware guest DHCP on VMnet2:
+Disabled
+
+================================================================================
+3. WINDOWS SERVER INSTALLATION
+================================================================================
+
+Installation Media:
+windows_server_2025_updated_june_2025_x64.iso
+
+Selected Edition:
+Windows Server 2025 Standard (Desktop Experience)
+
+Installation Target:
+60 GB unallocated virtual NVMe disk
+
+Windows Setup was allowed to create the required system partitions
+automatically.
+
+The Desktop Experience edition was selected to provide the Windows Server GUI
+for administration and lab learning.
+
+The built-in Administrator account was configured during initial setup.
+
+SECURITY NOTE:
+The Administrator password is intentionally NOT recorded in this evidence.
+
+================================================================================
+4. VMWARE TOOLS INSTALLATION AND VERIFICATION
+================================================================================
+
+VMware Tools was mounted through VMware Workstation and installed inside
+Windows Server.
+
+The server was restarted after installation.
+
+Verification Command:
+
+Get-Service VMTools
+
+Observed Result:
+
+Status   Name      DisplayName
+------   ----      -----------
+Running  VMTools   VMware Tools
+
+Result:
+PASS
+
+VMware Tools was successfully installed and the VMware Tools service was
+running after reboot.
+
+================================================================================
+5. WINDOWS LICENSING CHECK
+================================================================================
+
+Licensing status was inspected using:
+
+slmgr /xpr
+
+and:
+
+slmgr /dlv
+
+Observed edition:
+Windows ServerStandard / Windows Server 2025 Standard
+
+Observed License Status:
+Licensed
+
+Additional licensing information indicated a volume/KMS client channel.
+
+No licensing changes were made as part of this baseline configuration.
+
+NOTE:
+This evidence records only the Windows-reported licensing state observed
+during configuration. Licensing troubleshooting or modification was outside
+the scope of this stage.
+
+================================================================================
+6. ORIGINAL SERVER IDENTITY
+================================================================================
+
+Before configuration, Windows generated the following computer name:
+
+WIN-J6K7MMAGNOJ
+
+Verification Command:
+
+hostname
+
+Observed Result:
+
+WIN-J6K7MMAGNOJ
+
+
+Additional Verification:
+
+Get-ComputerInfo | Select-Object CsName
+
+Observed Result:
+
+CsName
+------
+WIN-J6K7MMAGNOJ
+
+This original hostname was recorded before making any identity changes.
+
+================================================================================
+7. INITIAL NETWORK BASELINE
+================================================================================
+
+Before static IPv4 configuration, Ethernet0 was configured to obtain an IPv4
+address automatically.
+
+Because VMware DHCP was intentionally disabled on VMnet2, DC01 did not receive
+a DHCP lease and Windows assigned an APIPA address.
+
+Relevant initial configuration:
+
+Host Name:
+WIN-J6K7MMAGNOJ
+
+Network Adapter:
+Ethernet0
+
+Adapter Description:
+Intel(R) 82574L Gigabit Network Connection
+
+DHCP Enabled:
+Yes
+
+Autoconfiguration IPv4 Address:
+169.254.118.151
+
+Subnet Mask:
+255.255.0.0
+
+Default Gateway:
+None
+
+IPv4 DNS Server:
+None configured
+
+IP Routing Enabled:
+No
+
+Interpretation:
+The 169.254.118.151 address was an Automatic Private IP Addressing (APIPA)
+address automatically assigned by Windows because the interface was configured
+for DHCP but no DHCP server was available on VMnet2.
+
+This behavior was expected because VMnet2 guest DHCP had intentionally been
+disabled as part of the lab design.
+
+================================================================================
+8. PRE-CONFIGURATION CONNECTIVITY TEST
+================================================================================
+
+Before assigning the planned LAB-LAN static address, connectivity to the
+VMware host-side VMnet2 interface was tested.
+
+Command:
+
+ping 10.10.10.1
+
+Observed Result:
+
+PING: transmit failed. General failure.
+PING: transmit failed. General failure.
+PING: transmit failed. General failure.
+PING: transmit failed. General failure.
+
+Ping statistics for 10.10.10.1:
+    Packets: Sent = 4, Received = 0, Lost = 4 (100% loss)
+
+Result:
+FAIL - Expected at this stage
+
+Interpretation:
+DC01 did not yet have a valid IPv4 configuration for the intended
+10.10.10.0/24 LAB-LAN.
+
+The server was using an APIPA 169.254.0.0/16 address rather than an address
+within 10.10.10.0/24.
+
+The "General failure" message was consistent with a local network
+configuration/path problem rather than demonstrating that ICMP packets
+successfully reached 10.10.10.1 and received no response.
+
+================================================================================
+9. SERVER IDENTITY CONFIGURATION
+================================================================================
+
+The Windows-generated hostname was changed from:
+
+WIN-J6K7MMAGNOJ
+
+to:
+
+DC01
+
+Computer Description:
+
+Windows Server - Cybersecurity Lab
+
+The server remained a member of:
+
+WORKGROUP
+
+DC01 was restarted to apply the computer-name change.
+
+Post-Restart Verification:
+
+hostname
+
+Observed Result:
+
+DC01
+
+
+Additional Verification Command:
+
+Get-ComputerInfo | Select-Object CsName, CsDomain, CsDomainRole
+
+Observed Result:
+
+CsName CsDomain  CsDomainRole
+------ --------  ------------
+DC01   WORKGROUP StandaloneServer
+
+Result:
+PASS
+
+Interpretation:
+The server rename was successfully applied.
+
+CsDomainRole reported StandaloneServer, confirming that DC01 had not yet been
+promoted to a domain controller at the time of this baseline.
+
+================================================================================
+10. NETWORK ADAPTER VERIFICATION
+================================================================================
+
+Command:
+
+Get-NetAdapter
+
+Observed Adapter:
+
+Name:
+Ethernet0
+
+Interface Index:
+6
+
+Status:
+Up
+
+Link Speed:
+1 Gbps
+
+Adapter Description:
+Intel(R) 82574L Gigabit Network Connection
+
+Result:
+PASS
+
+Ethernet0 was confirmed as the active network interface connected to the
+VMnet2 LAB-LAN.
+
+================================================================================
+11. STATIC IPV4 CONFIGURATION
+================================================================================
+
+Ethernet0 was changed from automatic IPv4 configuration to a manually assigned
+static IPv4 configuration.
+
+Configured values:
+
+IP Address:
+10.10.10.10
+
+Subnet Mask:
+255.255.255.0
+
+CIDR Prefix:
+24
+
+Network:
+10.10.10.0/24
+
+Default Gateway:
+None
+
+IPv4 DNS:
+None configured at this stage
+
+DHCP:
+Disabled
+
+Reason for No Default Gateway:
+DC01 was intentionally isolated on VMnet2 during the baseline configuration.
+Communication with systems on the same 10.10.10.0/24 subnet does not require a
+default gateway.
+
+Reason for Deferring DNS Configuration:
+DNS configuration was intentionally separated from the basic IPv4
+configuration. DC01 had not yet been configured with the DNS Server or Active
+Directory Domain Services roles.
+
+================================================================================
+12. POST-CONFIGURATION IPV4 VERIFICATION
+================================================================================
+
+Command:
+
+ipconfig /all
+
+Relevant Observed State:
+
+Host Name:
+DC01
+
+Ethernet Adapter:
+Ethernet0
+
+DHCP Enabled:
+No
+
+IPv4 Address:
+10.10.10.10 (Preferred)
+
+Subnet Mask:
+255.255.255.0
+
+Default Gateway:
+None
+
+IP Routing Enabled:
+No
+
+Result:
+PASS
+
+The original APIPA address was no longer being used as the active IPv4
+configuration. DC01 was correctly configured on the VMnet2 LAB-LAN.
+
+================================================================================
+13. POST-CONFIGURATION CONNECTIVITY TEST
+================================================================================
+
+The same destination used during the pre-configuration test was tested again
+after assigning the static IPv4 address.
+
+Command:
+
+ping 10.10.10.1
+
+Observed Result:
+
+Packets: Sent = 4, Received = 4, Lost = 0 (0% loss)
+
+Approximate round trip times in milli-seconds:
+
+Minimum = 0ms
+Maximum = 0ms
+Average = 0ms
+
+Result:
+PASS
+
+Interpretation:
+DC01 successfully communicated with the VMware host-side VMnet2 interface
+after receiving its planned 10.10.10.10/24 configuration.
+
+Because both 10.10.10.10 and 10.10.10.1 belong to the directly connected
+10.10.10.0/24 subnet, no default gateway was required for this communication.
+
+================================================================================
+14. BEFORE/AFTER NETWORK COMPARISON
+================================================================================
+
+BEFORE STATIC CONFIGURATION
+
+Hostname:
+WIN-J6K7MMAGNOJ
+
+DHCP:
+Enabled
+
+IPv4:
+169.254.118.151/16 (APIPA)
+
+Default Gateway:
+None
+
+Connectivity to 10.10.10.1:
+FAILED - General failure
+
+
+AFTER STATIC CONFIGURATION
+
+Hostname:
+DC01
+
+DHCP:
+Disabled
+
+IPv4:
+10.10.10.10/24
+
+Default Gateway:
+None
+
+Connectivity to 10.10.10.1:
+SUCCESS - 4/4 replies, 0% packet loss
+
+
+This before/after test demonstrated that a physically/virtually connected
+network interface does not by itself provide valid Layer 3 connectivity.
+Correct IPv4 addressing for the intended subnet was required.
+
+================================================================================
+15. BASELINE RECOVERY POINT
+================================================================================
+
+After completing and validating the Windows Server baseline configuration, a
+VMware snapshot was created.
+
+Snapshot Name:
+
+DC01 - Baseline Configuration
+
+Snapshot Purpose:
+
+Provide a known-good recovery point before Active Directory Domain Services
+and DNS deployment.
+
+Snapshot State Includes:
+
+- Windows Server 2025 Standard (Desktop Experience) installed
+- Administrator account configured
+- VMware Tools installed and verified
+- Computer name configured as DC01
+- Computer description configured
+- Server remains in WORKGROUP
+- Server role remains StandaloneServer
+- Ethernet0 connected to VMnet2
+- Static IPv4 address 10.10.10.10/24 configured
+- DHCP disabled on Ethernet0
+- No default gateway configured
+- No IPv4 DNS server configured
+- VMnet2 connectivity successfully validated
+- AD DS not installed
+- DNS Server role not installed
+- Server not yet promoted to a domain controller
+
+================================================================================
+16. SECURITY AND CONFIGURATION OBSERVATIONS
+================================================================================
+
+1. Static addressing is appropriate for infrastructure systems such as domain
+   controllers and DNS servers because clients and services require predictable
+   addressing.
+
+2. APIPA indicated that Windows could not obtain a DHCP lease. In this lab,
+   that behavior was expected because VMware guest DHCP was deliberately
+   disabled on VMnet2.
+
+3. A default gateway is not required for communication between devices on the
+   same IPv4 subnet.
+
+4. DC01 was kept isolated from external networks during initial baseline
+   configuration.
+
+5. DNS configuration was deliberately deferred until the DNS/Active Directory
+   deployment stage.
+
+6. The server was validated as a standalone WORKGROUP server before AD DS
+   promotion. This creates a useful before/after comparison for later evidence.
+
+7. VMware Tools was verified by checking the service state rather than relying
+   only on successful completion of the installer.
+
+8. A known-good VMware snapshot was created before introducing major
+   infrastructure changes.
+
+================================================================================
+17. KEY LEARNING OUTCOMES
+================================================================================
+
+This stage demonstrated:
+
+- Creation and installation of a Windows Server virtual machine
+- Selection and installation of Windows Server Desktop Experience
+- VMware Tools installation and service verification
+- Windows Server hostname management
+- Windows Server computer descriptions
+- WORKGROUP versus domain-controller state
+- Windows APIPA behavior
+- DHCP client behavior when no DHCP server is available
+- Static IPv4 configuration
+- IPv4 subnetting and /24 addressing
+- Same-subnet communication without a default gateway
+- Network adapter identification and validation
+- Pre-change and post-change connectivity testing
+- Establishing a known-good recovery point before major server-role changes
+- Maintaining evidence of configuration changes and validation results
+
+================================================================================
+18. FINAL BASELINE STATE
+================================================================================
+
+System:
+DC01
+
+Operating System:
+Windows Server 2025 Standard (Desktop Experience)
+
+Computer Name:
+DC01
+
+Computer Description:
+Windows Server - Cybersecurity Lab
+
+Domain/Workgroup:
+WORKGROUP
+
+Domain Role:
+StandaloneServer
+
+Network Adapter:
+Ethernet0
+
+Network:
+VMnet2 LAB-LAN
+
+IPv4:
+10.10.10.10/24
+
+DHCP:
+Disabled
+
+Default Gateway:
+None
+
+IPv4 DNS:
+Not yet configured
+
+IP Routing:
+Disabled
+
+VMware Tools:
+Installed and Running
+
+VMnet2 Connectivity:
+PASS
+
+AD DS:
+Not yet installed
+
+DNS Server Role:
+Not yet installed
+
+Domain Controller Promotion:
+Not yet performed
+
+Recovery Snapshot:
+DC01 - Baseline Configuration
+
+OVERALL RESULT:
+PASS
+
+DC01 has been successfully installed, configured, and validated as a
+standalone Windows Server baseline. The system is ready for the next controlled
+stage of the lab: Active Directory Domain Services and DNS deployment.
+
+================================================================================
+END OF EVIDENCE 012
+================================================================================
